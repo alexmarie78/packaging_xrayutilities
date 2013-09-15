@@ -4,7 +4,7 @@ Maintainer: Eugen Wintersberger <eugen.wintersberger@gmail.com>
 Build-Depends: debhelper (>= 9.0.0), python-all-dev, python-setuptools,
  python-numpy (>=1.6), 
 X-Python-Version: >=2.6
-Standards-Version: 3.9.3
+Standards-Version: 3.9.4
 Section: python
 Homepage: https://code.google.com/p/pni-libraries/
 
