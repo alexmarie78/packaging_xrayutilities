@@ -14,6 +14,10 @@ PYTHON2=$(shell pyversions -vr)
 %:
 	dh $@ --with python2
 
+override_auto_install:
+	dh_auto_install
+	dh_numpy
+
 build-python%:
 	python$* setup.py build
 
