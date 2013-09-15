@@ -1,0 +1,21 @@
+Source: python-xrayutilities
+Priority: extra
+Maintainer: Eugen Wintersberger <eugen.wintersberger@gmail.com>
+Build-Depends: debhelper (>= 9.0.0), python-all-dev, python-setuptools,
+ python-numpy (>=1.6), 
+X-Python-Version: >=2.6
+Standards-Version: 3.9.3
+Section: python
+Homepage: https://code.google.com/p/pni-libraries/
+
+Package: python-xrayutilities
+Section: python
+Architecture: any
+Depends: ${python:Depends},${shlibs:Depends},${misc:Depends},python-numpy-abi9,
+ python-tables (>=2.0), python-scipy (>=0.10)
+Recommends: python-matplotlib (>=1.0)
+Description: Python package for xray data reduction and analysis
+ xrayutilities is a collection of scripts used to analyze x-ray diffraction
+ data. It consists of a python package and several routines coded in C. It
+ especially useful for the reciprocal space conversion of diffraction data taken
+ with linear and area detectors.
