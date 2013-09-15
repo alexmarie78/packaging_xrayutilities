@@ -1,6 +1,6 @@
-Format: http://dep.debian.net/deps/dep5
-Upstream-Name: python-cdma
-Source: https://code.google.com/p/pni-libraries/
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: xrayutilities
+Source: http://sourceforge.net/projects/xrayutilities/?source=directory
 
 Files: *
 Copyright: 2013 Dominik Kriegner <dominik.kriegner@gmail.com>
