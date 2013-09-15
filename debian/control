@@ -11,7 +11,7 @@ Homepage: https://code.google.com/p/pni-libraries/
 Package: python-xrayutilities
 Section: python
 Architecture: any
-Depends: ${python:Depends},${shlibs:Depends},${misc:Depends},python-numpy-abi9,
+Depends: ${python:Depends},${shlibs:Depends},${misc:Depends},
  python-tables (>=2.0), python-scipy (>=0.10)
 Recommends: python-matplotlib (>=1.0)
 Description: Python package for xray data reduction and analysis
