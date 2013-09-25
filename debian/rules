@@ -27,4 +27,5 @@ install-python%:
 	python$* setup.py install --install-layout=deb --root=$(CURDIR)/debian/tmp
 
 override_dh_auto_install:$(PYTHON2:%=install-python%)
+	dh_numpy
 
