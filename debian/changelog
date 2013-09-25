@@ -1,10 +1,5 @@
-python-xrayutilities (1.0.1-4) unstable; urgency=low
+python-xrayutilities (1.0.2-1) unstable; urgency=low
 
-  * Use sourceforge redirector now in the watch file
-  * Fixed Format field in the copyright file
-  * added a version string to the watch file
-  * fixed the standards version in debian/control
-  * New package version including a watch file
   * Initial release. (Closes: #723017)
 
  -- Eugen Wintersberger <eugen.wintersberger@gmail.com>  Sun, 15 Sep 2013 13:42:41 +0200
