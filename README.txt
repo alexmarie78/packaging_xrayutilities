@@ -57,6 +57,28 @@ refer to your operating system documentation to find out how to install
 those packages. On Microsoft Windows refer to the Documentation for the 
 easiest way of the installation (python(x,y)).
 
+On Microsoft Windows with python(x,y) it is furthermore necessary to manually
+specify the C compiler used for building the extension modules using
+
+  $> python setup.py build -c mingw32
+
+before the installation can be performed as described above.
+
+Installation for Python-3.X
+===========================
+
+The current developement is still focues mainly on Python-2.7, however
+xrayutilies can be used with Python-3.X versions when the 2to3 tool is used to
+patch the Python sources. We suggest to use
+
+  $> 2to3 -p xrayutilities >> xrayutilities-python3.patch
+
+to create the necessary patch. or
+
+  $> 2to3 -p -w xrayutilities 
+
+to change the source tree directly for use with Python3.X.
+
 The python package configuration
 ================================
 
@@ -133,6 +155,16 @@ The API-documentation can also be browsed by ::
   $> pydoc -p PORT
  
 in any web-browser, after the installation is finished.
+
+To build the PDF documentation from the sources use sphinx:
+
+  sphinx-build -b latex doc/source doc/latex
+  cd doc/latex; make 
+  
+or generate a texinfo file using 
+
+  sphinx-build -b texinfo doc/source doc/texinfo
+  cd doc/texinfo; make 
 
 
 PACKAGING
