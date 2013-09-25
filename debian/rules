@@ -20,6 +20,14 @@ override_auto_install:
 
 build-python%:
 	python$* setup.py build
+	BUILDPATH="$$PWD/`ls -d build/lib*`"; \
+	echo $$BUILDPATH
+	echo $$PWD
+	cd doc && export PYTHONPATH="$$PWD/`ls -d ../build/lib*`" &&  sphinx-build -b latex source latex
+	cd doc/latex &&  make
+	cd doc && export PYTHONPATH="$$PWD/`ls -d ../build/lib*`" && sphinx-build -b texinfo source texinfo
+	cd doc/texinfo && make
+	cd doc && export PYTHONPATH="$$PWD/`ls -d ../build/lib*`" && sphinx-build -b html source html
 
 override_dh_auto_build:$(PYTHON2:%=build-python%)
 
@@ -29,3 +37,6 @@ install-python%:
 override_dh_auto_install:$(PYTHON2:%=install-python%)
 	dh_numpy
 
+override_installdocs:
+	dh_sphinxdoc doc/html
+	dh_installdocs

@@ -1,0 +1,3 @@
+doc/latex/*.pdf
+doc/texinfo/*.info
+doc/html
