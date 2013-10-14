@@ -1,6 +1,6 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: xrayutilities
-Source: http://sourceforge.net/projects/xrayutilities/?source=directory
+Source: http://sourceforge.net/projects/xrayutilities/
 
 Files: *
 Copyright: 2013 Dominik Kriegner <dominik.kriegner@gmail.com>
