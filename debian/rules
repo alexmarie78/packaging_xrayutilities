@@ -15,8 +15,17 @@ override_dh_auto_clean:
 	rm -rf build
 
 override_dh_auto_build-indep:
+	python setup.py build
 	python setup.py build_doc
 
 override_dh_auto_install:
 	dh_auto_install
 	dh_numpy
+
+override_dh_install:
+	# Install everything excluding the *_d.so debug extensions to python-foo
+	dh_install -X"*_d.so" "debian/tmp/*" -p python-xrayutilities
+	# Install the debug extensions to python-foo-dbg
+	dh_install "debian/tmp/usr/lib/python*/*-packages/xrayutilities/*_d.so" -p python-xrayutilities-dbg
+	# Continue with regular dh_install
+	dh_install
