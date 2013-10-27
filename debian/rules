@@ -19,8 +19,8 @@ override_dh_auto_build-indep:
 	python setup.py build_doc
 
 override_dh_auto_install:
-	dh_auto_install
 	dh_numpy
+	dh_auto_install
 
 override_dh_install:
 	# Install everything excluding the *_d.so debug extensions to python-foo
