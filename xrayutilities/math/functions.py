@@ -111,7 +111,9 @@ def Gauss1d_der_x(x,*p):
     for parameter description see Gauss1d
     """
 
-    return 2*(p[0]-x)*Gauss1d(x,*p)
+    lp = numpy.copy(p)
+    lp[3] = 0
+    return 2*(p[0]-x)*Gauss1d(x,*lp)
 
 
 def Gauss1d_der_p(x,*p):
@@ -121,10 +123,11 @@ def Gauss1d_der_p(x,*p):
 
     for parameter description see Gauss1d
     """
-
-    r = numpy.concatenate(( -2*(p[0]-x)*Gauss1d(x,*p),\
-                            (p[0]-x)**2/(2*p[1]**3)*Gauss1d(x,*p),\
-                            Gauss1d(x,*p)/p[2],\
+    lp = numpy.copy(p)
+    lp[3] = 0
+    r = numpy.concatenate(( -2*(p[0]-x)*Gauss1d(x,*lp),\
+                            (p[0]-x)**2/(2*p[1]**3)*Gauss1d(x,*lp),\
+                            Gauss1d(x,*lp)/p[2],\
                             numpy.ones(x.shape,dtype=numpy.float) ))
     r.shape = (4,) + x.shape
 
@@ -225,6 +228,31 @@ def Lorentz1d(x,*p):
 
     return g
 
+def Lorentz1d_der_x(x,*p):
+    """
+    function to calculate the derivative of a Gaussian with respect to x
+
+    for parameter description see Lorentz1d
+    """
+
+    return 4*(p[0]-x)* p[2]/p[1]/(1+(2*(x-p[0])/p[1])**2)**2
+
+def Lorentz1d_der_p(x,*p):
+    """
+    function to calculate the derivative of a Gaussian with respect the
+    parameters p
+
+    for parameter description see Lorentz1d
+    """
+
+    r = numpy.concatenate(( 4*(x-p[0])* p[2]/p[1]/(1+(2*(x-p[0])/p[1])**2)**2,\
+                            4*(p[0]-x)* p[2]/p[1]**2/(1+(2*(x-p[0])/p[1])**2)**2,\
+                            1/(1+(2*(x-p[0])/p[1])**2),\
+                            numpy.ones(x.shape,dtype=numpy.float) ))
+    r.shape = (4,) + x.shape
+
+    return r
+
 def Lorentz2d(x,y,*p):
     """
     function to calculate a general two dimensional Lorentzian
@@ -249,6 +277,29 @@ def Lorentz2d(x,y,*p):
 
     g = p[5]+p[4]/(1+(2*(rcen_x-xp)/p[2])**2+(2*(rcen_y-yp)/p[3])**2)
     return g
+
+
+def PseudoVoigt1d(x,*p):
+    """
+    function to calculate a pseudo Voigt function as linear combination of a Gauss and Lorentz peak
+
+    Parameters
+    ----------
+     p:     list of parameters of the Lorentz-function
+            [XCEN,FWHM,AMP,BACKGROUND,ETA]
+            ETA: 0 ...1  0 means pure Gauss and 1 means pure Lorentz 
+     x,y:   coordinate(s) where the function should be evaluated
+
+    Returns
+    -------
+    the value of the PseudoVoigt described by the parameters p
+    at position (x,y)
+
+    """
+
+    f = p[3]+p[2] * ( p[4]*(1/(1+(2*(x-p[0])/(p[1]/2.))**2)) + (1-p[4])*numpy.exp(-numpy.log(2)*((p[0]-x)/(p[1]/2.))**2) ) 
+
+    return f
 
 
 def Debye1(x):
