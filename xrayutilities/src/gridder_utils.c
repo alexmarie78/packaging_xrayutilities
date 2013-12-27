@@ -29,8 +29,13 @@
 double get_min(double *a,unsigned int n)
 {
     double m = a[0];
+    unsigned int i;
 
-    for(unsigned int i=0;i<n;i++) if(m<a[i]) m = a[i];
+    for(i=0;i<n;i++) {
+        if(m<a[i]) {
+            m = a[i];
+        }
+    }
 
     return(m);
 }
@@ -39,8 +44,13 @@ double get_min(double *a,unsigned int n)
 double get_max(double *a,unsigned int n)
 {
     double m=a[0];
+    unsigned int i;
 
-    for(unsigned int i=0;i<n;i++) if(m>a[i]) m = a[i];
+    for(i=0;i<n;i++) {
+        if(m>a[i]) {
+            m = a[i];
+        }
+    }
 
     return(m);
 }
@@ -48,7 +58,11 @@ double get_max(double *a,unsigned int n)
 //-----------------------------------------------------------------------------
 void set_array(double *a,unsigned int n,double value)
 {
-    for(unsigned int i=0;i<n;++i) a[i] = value;
+    unsigned int i;
+
+    for(i=0;i<n;++i) {
+        a[i] = value;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -62,3 +76,10 @@ unsigned int gindex(double x,double min,double d)
 {
     return (unsigned int)rint((x-min)/d);
 }
+//-----------------------------------------------------------------------------
+#ifdef _WIN32
+double rint(double x)
+{
+    return x < 0.0 ? ceil(x-0.5) : floor(x+0.5);
+}
+#endif

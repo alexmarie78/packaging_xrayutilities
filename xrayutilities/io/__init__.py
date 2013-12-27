@@ -16,6 +16,8 @@
 # Copyright (C) 2009-2010 Eugen Wintersberger <eugen.wintersberger@desy.de>
 # Copyright (C) 2009-2013 Dominik Kriegner <dominik.kriegner@gmail.com>
 
+from .helper import xu_open
+
 from .radicon import rad2hdf5
 from .radicon import hst2hdf5
 from .radicon import selecthst
@@ -38,6 +40,9 @@ from .spec import geth5_scan
 from .spec import geth5_scan as geth5_map
 
 from .edf import EDFFile
+from .edf import EDFDirectory
+from .cbf import CBFFile
+from .cbf import CBFDirectory
 
 from .spectra import Spectra
 
@@ -46,3 +51,6 @@ from .panalytical_xml import getxrdml_map
 
 # parser for the alignment log file of the rotating anode
 from .rotanode_alignment import RA_Alignment
+
+from .desy_tty08 import tty08File
+from .desy_tty08 import gettty08_scan

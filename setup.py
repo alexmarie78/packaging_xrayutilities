@@ -85,7 +85,8 @@ extmodul = Extension('xrayutilities.cxrayutilities',
                                 os.path.join('xrayutilities','src','gridder2d.c'),
                                 os.path.join('xrayutilities','src','block_average.c'),
                                 os.path.join('xrayutilities','src','qconversion.c'),
-                                os.path.join('xrayutilities','src','gridder3d.c')],
+                                os.path.join('xrayutilities','src','gridder3d.c'),
+                                os.path.join('xrayutilities','src','file_io.c')],
                      define_macros = user_macros)
 
 try:
@@ -114,7 +115,7 @@ except ImportError:
     pass
 
 setup(name="xrayutilities",
-      version="1.0.3",
+      version="1.0.4",
       author="Eugen Wintersberger, Dominik Kriegner",
       description="package for x-ray diffraction data evaluation",
       classifiers=["Topic :: Scientific/Engineering :: Physics",
