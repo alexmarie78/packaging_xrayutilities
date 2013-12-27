@@ -55,9 +55,11 @@ PbTe = Material("PbTe",lattice.RockSalt_Cubic_Lattice(elements.Pb,elements.Te,6.
                    CubicElasticTensor(93.6,7.7,13.4))
 PbSe = Material("PbSe",lattice.RockSalt_Cubic_Lattice(elements.Pb,elements.Se,6.128),
                    CubicElasticTensor(123.7,19.3,15.9))
+NaCl = Material("NaCl",lattice.RockSalt_Cubic_Lattice(elements.Na,elements.Cl,5.6402))
 GaN = Material("GaN",lattice.WurtziteLattice(elements.Ga,elements.N,3.189,5.186),
                    HexagonalElasticTensor(390.e9,145.e9,106.e9,398.e9,105.e9),thetaDebye=600)
 BaF2 = Material("BaF2",lattice.CubicFm3mBaF2(elements.Ba,elements.F,6.2001))
+SrF2 = Material("SrF2",lattice.CubicFm3mBaF2(elements.Sr,elements.F,5.8007))
 MnTe = Material("MnTe",lattice.NiAsLattice(elements.Mn,elements.Te,4.1429,6.7031))
 GeTe = Material("GeTe",lattice.GeTeRhombohedral(elements.Ge,elements.Te,5.996,88.18,0.237)) 
 Al = Material("Al",lattice.FCCLattice(elements.Al,4.04958))
@@ -76,6 +78,10 @@ Cu = Material("Cu",lattice.FCCLattice(elements.Cu,3.61496))
 CuMnAs = Material("CuMnAs",lattice.CuMnAsLattice(elements.Cu,elements.Mn,elements.As,3.82,3.82,6.30))
 CaTiO3 = Material("CaTiO3",lattice.PerovskiteTypeRhombohedral(elements.Ca,elements.Ti,elements.O,3.795,90))
 BiFeO3 = Material("BiFeO3",lattice.PerovskiteTypeRhombohedral(elements.Bi,elements.Fe,elements.O,3.965,89.3))
+FeO = Material("FeO",lattice.RockSalt_Cubic_Lattice(elements.Fe,elements.O, 4.332))
+CoO = Material("CoO",lattice.RockSalt_Cubic_Lattice(elements.Co,elements.O, 4.214))
+Fe3O4 = Material("Fe3O4",lattice.MagnetiteLattice(elements.Fe,elements.Fe,elements.O, 8.3958))
+Co3O4 = Material("Co3O4",lattice.MagnetiteLattice(elements.Co,elements.Co,elements.O, 8.0821))
 
 # materials defined from cif file
 try:

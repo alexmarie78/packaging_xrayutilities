@@ -353,7 +353,7 @@ def linear_detector_calib(angle,mca_spectra,**keyargs):
 ## detector parameter calculation from scan with
 ## area detector (determine maximum by center of mass)
 ######################################################
-def area_detector_calib(angle1,angle2,ccdimages,detaxis,r_i,plot=True,cut_off = 0.7,start = (0,0,0,0), fix = (False,False,False,False), fig=None,wl=None):
+def area_detector_calib(angle1,angle2,ccdimages,detaxis,r_i,plot=True,cut_off = 0.7,start = (0,0,0,0), fix = (False,False,False,False), fig=None,wl=None,plotlog=False,debug=False):
     """
     function to calibrate the detector parameters of an area detector
     it determines the detector tilt possible rotations and offsets in the
@@ -383,10 +383,11 @@ def area_detector_calib(angle1,angle2,ccdimages,detaxis,r_i,plot=True,cut_off = 
                   default: None (creates own figure)
         wl ...... wavelength of the experiment in Angstrom (default: config.WAVELENGTH)
                   value does not matter here and does only affect the scaling of the error
+        plotlog . flag to specify if the created error plot should be on log-scale
+        debug ... flag to specify that you want to see verbose output and saving of images to show if the CEN determination works
+
     """
 
-    debug=False
-    plotlog=False
     if plot:
         try: plt.__name__
         except NameError:
@@ -423,6 +424,14 @@ def area_detector_calib(angle1,angle2,ccdimages,detaxis,r_i,plot=True,cut_off = 
         img = ccdimages[i]
         if numpy.sum(img) > cut_off*avg:
             [cen1,cen2] = center_of_mass(img)
+            if debug:
+                plt.figure("_ccd")
+                plt.imshow(utilities.maplog(img),origin='low')
+                plt.plot(cen2,cen1,"wo",mfc='none')
+                plt.axis([cen2-25,cen2+25,cen1-25,cen1+25])
+                plt.savefig("xu_calib_ccd_img%d.png"%i)
+                plt.close("_ccd")
+
             n1 = numpy.append(n1,cen1)
             n2 = numpy.append(n2,cen2)
             ang1 = numpy.append(ang1,angle1[i])
@@ -439,7 +448,7 @@ def area_detector_calib(angle1,angle2,ccdimages,detaxis,r_i,plot=True,cut_off = 
 
     epslist = []
     paramlist = []
-    epsmin = 1.
+    epsmin = numpy.inf
     fitmin = None
 
     print("tiltaz   tilt   detrot   offset:  error (relative) (fittime)")
@@ -621,7 +630,7 @@ def _determine_detdir(ang1,ang2,n1,n2,detaxis,r_i):
 
     return detdir1,detdir2
 
-def _area_detector_calib_fit(ang1,ang2,n1,n2, detaxis, r_i, detdir1, detdir2, start = (0,0,0,0), fix = (False,False,False,False),full_output=False,wl=1.):
+def _area_detector_calib_fit(ang1,ang2,n1,n2, detaxis, r_i, detdir1, detdir2, start = (0,0,0,0), fix = (False,False,False,False),full_output=False,wl=1.,debug=False):
     """
     INTERNAL FUNCTION
     function to calibrate the detector parameters of an area detector
@@ -649,6 +658,7 @@ def _area_detector_calib_fit(ang1,ang2,n1,n2, detaxis, r_i, detdir1, detdir2, st
         full_output   flag to tell if to return fit object with final parameters and detector directions
         wl ...... wavelength of the experiment in Angstrom (default: 1)
                   value does not matter here and does only affect the scaling of the error
+        debug ... flag to tell if you want to see debug output of the script (switch this to true only if you can handle it :))
 
     returns
     -------
@@ -657,8 +667,6 @@ def _area_detector_calib_fit(ang1,ang2,n1,n2, detaxis, r_i, detdir1, detdir2, st
     if full_output:
         eps,param,fit
     """
-
-    debug=False
 
     def areapixel(params,detectorDir1,detectorDir2,r_i,detectorAxis,*args,**kwargs):
         """
@@ -966,7 +974,7 @@ def _area_detector_calib_fit(ang1,ang2,n1,n2, detaxis, r_i, detdir1, detdir2, st
 ## detector parameter calculation from scan with
 ## area detector (determine maximum by center of mass)
 ######################################################
-def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,material,detaxis,r_i,plot=True,cut_off = 0.1,start = (0,0,0,0,0,0,'config'), fix = (False,False,False,False,False,False,False), fig=None):
+def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,material,detaxis,r_i,plot=True,cut_off = 0.1,start = (0,0,0,0,0,0,'config'), fix = (False,False,False,False,False,False,False), fig=None, plotlog=False, debug=False):
     """
     function to calibrate the detector parameters of an area detector
     it determines the detector tilt possible rotations and offsets in the
@@ -984,6 +992,7 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
      angle2 ..... inner detector arm angle
      ccdimages .. images of the ccd taken at the angles given above
      hkls ....... array/list of hkl values for every image
+     experiment . Experiment class object needed to get the UB matrix for the hkl peak treatment
      material ... material used as reference crystal
      detaxis .... detector arm rotation axis
                   default: ['z+','y-']
@@ -1002,14 +1011,14 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
         fix ..... fix parameters of start (default: (False,False,False,False,False,False,False))
         fig ..... matplotlib figure used for plotting the error
                   default: None (creates own figure)
+        plotlog . flag to specify if the created error plot should be on log-scale
+        debug ... flag to tell if you want to see debug output of the script (switch this to true only if you can handle it :))
     """
 
-    debug=False
-    plotlog=False
     if plot:
         try: plt.__name__
         except NameError:
-            print("XU.analyis.area_detector_calib: Warning: plot functionality not available")
+            print("XU.analyis.area_detector_calib_hkl: Warning: plot functionality not available")
             plot = False
 
     if start[-1]=='config':
@@ -1024,6 +1033,7 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
 
     # determine center of mass position from detector images
     # also use only images with an intensity larger than 70% of the average intensity
+    # the image selection is only performed for images in the primary beam
     n1 = numpy.zeros(0,dtype=numpy.double)
     n2 = n1
     ang1 = n1
@@ -1032,9 +1042,16 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
     usedhkls = []
 
     avg = 0
+    imgpbcnt = 0
     for i in range(Npoints):
-        avg += numpy.sum(ccdimages[i])
-    avg /= float(Npoints)
+        if (numpy.all(hkls[i] == (0,0,0))):
+            avg += numpy.sum(ccdimages[i])
+            imgpbcnt+=1
+    
+    if imgpbcnt > 0:
+        avg /= float(imgpbcnt)
+    else:
+        avg = 0
     (N1,N2) =  ccdimages[0].shape
 
     if debug:
@@ -1042,15 +1059,15 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
 
     for i in range(Npoints):
         img = ccdimages[i]
-        if numpy.sum(img) > cut_off*avg:
+        if ((numpy.sum(img) > cut_off*avg) or (numpy.all(hkls[i] != (0,0,0)))):
             [cen1,cen2] = center_of_mass(img)
-#            if True:
-#                plt.figure("_ccd")
-#                plt.imshow(utilities.maplog(img),origin='low')
-#                plt.plot(cen2,cen1,"wo",mfc='none')
-#                plt.axis([cen2-25,cen2+25,cen1-25,cen1+25])
-#                plt.savefig("_ccd/img%d.png"%i)
-#                plt.close("_ccd")
+            if debug:
+                plt.figure("_ccd")
+                plt.imshow(utilities.maplog(img),origin='low')
+                plt.plot(cen2,cen1,"wo",mfc='none')
+                plt.axis([cen2-25,cen2+25,cen1-25,cen1+25])
+                plt.savefig("xu_calib_hkl_ccd_img%d.png"%i)
+                plt.close("_ccd")
             n1 = numpy.append(n1,cen1)
             n2 = numpy.append(n2,cen2)
             ang1 = numpy.append(ang1,angle1[i])
@@ -1081,7 +1098,7 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
 
     epslist = []
     paramlist = []
-    epsmin = 1.
+    epsmin = numpy.inf
     fitmin = None
 
     print("tiltaz   tilt   detrot   offset  sampletilt+azimuth wavelength:  error (relative) (fittime)")
@@ -1179,7 +1196,7 @@ def area_detector_calib_hkl(sampleang,angle1,angle2,ccdimages,hkls,experiment,ma
     return (cch1,cch2,pwidth1,pwidth2,tiltazimuth,tilt,detrot,outerangle_offset),eps
 
 
-def _area_detector_calib_fit2(sang,ang1,ang2,n1,n2, hkls, experiment, material, detaxis, r_i, detdir1, detdir2, start = (0,0,0,0,0,0,1.0), fix = (False,False,False,False,False,False,False),full_output=False):
+def _area_detector_calib_fit2(sang,ang1,ang2,n1,n2, hkls, experiment, material, detaxis, r_i, detdir1, detdir2, start = (0,0,0,0,0,0,1.0), fix = (False,False,False,False,False,False,False),full_output=False,debug=False):
     """
     INTERNAL FUNCTION
     function to calibrate the detector parameters of an area detector
@@ -1193,6 +1210,7 @@ def _area_detector_calib_fit2(sang,ang1,ang2,n1,n2, hkls, experiment, material, 
      angle2 ..... inner detector arm angle
      n1,n2 ...... pixel number at which the beam was observed
      hkls ....... Miller indices of the reflection were the images were taken (use (0,0,0)) for primary beam
+     experiment . Experiment class object needed to get the UB matrix needed for the hkl peak treatment
      material ... material used as reference crystal
      detaxis .... detector arm rotation axis
                   default: ['z+','y-']
@@ -1208,7 +1226,8 @@ def _area_detector_calib_fit2(sang,ang1,ang2,n1,n2, hkls, experiment, material, 
                   By default: (0,0,0,0,0,0,1.0)
         fix ..... fix parameters of start
         full_output   flag to tell if to return fit object with final parameters and detector directions
-
+        debug ... flag to tell if you want to see debug output of the script (switch this to true only if you can handle it :))
+    
     returns
     -------
         eps   final epsilon of the fit
@@ -1216,8 +1235,6 @@ def _area_detector_calib_fit2(sang,ang1,ang2,n1,n2, hkls, experiment, material, 
     if full_output:
         eps,param,fit
     """
-
-    debug=False
 
     def areapixel2(params,detectorDir1,detectorDir2,r_i,detectorAxis,*args,**kwargs):
         """
@@ -1740,12 +1757,13 @@ def miscut_calc(phi,aomega,zeros=None,omega0=None,plot=True):
 #  correct substrate Bragg peak position in
 #  reciprocal space maps
 #################################################
-def fit_bragg_peak(om,tt,psd,omalign,ttalign,exphxrd,frange=(0.03,0.03),plot=True):
+def fit_bragg_peak(om,tt,psd,omalign,ttalign,exphxrd,frange=(0.03,0.03),peaktype='Gauss',plot=True):
     """
     helper function to determine the Bragg peak position in a reciprocal
     space map used to obtain the position needed for correction of the data.
     the determination is done by fitting a two dimensional Gaussian
-    (xrayutilities.math.Gauss2d)
+    (xrayutilities.math.Gauss2d) or Lorentzian 
+    (xrayutilities.math.Lorentz2d)
 
     PLEASE ALWAYS CHECK THE RESULT CAREFULLY!
 
@@ -1762,21 +1780,30 @@ def fit_bragg_peak(om,tt,psd,omalign,ttalign,exphxrd,frange=(0.03,0.03),plot=Tru
               reciprocal space.
      frange:  data range used for the fit in both directions
               (see above for details default:(0.03,0.03) unit: \AA^{-1})
-     plot:  if True (default) function will plot the result of the fit in comparison
-            with the measurement.
+     peaktype: can be 'Gauss' or 'Lorentz' to fit either of the two peak 
+               shapes
+     plot:  if True (default) function will plot the result of the fit in 
+            comparison with the measurement.
 
     Returns
     -------
     omfit,ttfit,params,covariance: fitted angular values, and the fit
-            parameters (of the Gaussian) as well as their errors
+            parameters (of the Gaussian/Lorentzian) as well as their errors
     """
+    if peaktype=='Gauss':
+        func = math.Gauss2d
+    elif peaktype=='Lorentz':
+        func = math.Lorentz2d
+    else:
+        raise InputError("peaktype must be either 'Gauss' or 'Lorentz'")
+
     if om.size != psd.size:
         [qx,qy,qz] = exphxrd.Ang2Q.linear(om,tt)
     else:
         [qx,qy,qz] = exphxrd.Ang2Q(om,tt)
     [qxsub,qysub,qzsub] = exphxrd.Ang2Q(omalign,ttalign)
     params = [qysub,qzsub,0.001,0.001,psd.max(),0,0.]
-    params,covariance = math.fit_peak2d(qy.flatten(),qz.flatten(),psd.flatten(),params,[qysub-frange[0],qysub+frange[0],qzsub-frange[1],qzsub+frange[1]],math.Gauss2d,maxfev=10000)
+    params,covariance = math.fit_peak2d(qy.flatten(),qz.flatten(),psd.flatten(),params,[qysub-frange[0],qysub+frange[0],qzsub-frange[1],qzsub+frange[1]],func,maxfev=10000)
     # correct params
     params[6] = params[6]%(numpy.pi)
     if params[5]<0 : params[5] = 0
@@ -1795,7 +1822,7 @@ def fit_bragg_peak(om,tt,psd,omalign,ttalign,exphxrd,frange=(0.03,0.03),plot=Tru
         INT = utilities.maplog(gridder.gdata.transpose(),4,0)
         QXm = gridder.xmatrix
         QZm = gridder.ymatrix
-        cl = plt.contour(gridder.xaxis,gridder.yaxis,utilities.maplog(math.Gauss2d(QXm,QZm,*params),4,0).transpose(),8,colors='k',linestyles='solid')
+        cl = plt.contour(gridder.xaxis,gridder.yaxis,utilities.maplog(func(QXm,QZm,*params),4,0).transpose(),8,colors='k',linestyles='solid')
         cf = plt.contourf(gridder.xaxis, gridder.yaxis, INT,35)
         cf.collections[0].set_label('data')
         cl.collections[0].set_label('fit')

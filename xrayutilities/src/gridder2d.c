@@ -25,6 +25,7 @@
 
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #define PY_ARRAY_UNIQUE_SYMBOL XU_UNIQUE_SYMBOL
+#define NO_IMPORT_ARRAY
 #include "gridder.h"
 #include "gridder_utils.h"
 
@@ -40,6 +41,7 @@ PyObject* pygridder2d(PyObject *self,PyObject *args)
     double xmin,xmax,ymin,ymax;
     unsigned int nx,ny;
     int flags;
+    int n,result;
 
     if(!PyArg_ParseTuple(args,"O!O!O!IIddddO!|O!i",
                          &PyArray_Type,&py_x,
@@ -67,10 +69,10 @@ PyObject* pygridder2d(PyObject *self,PyObject *args)
     if(norm!=NULL) norm = (double *)PyArray_DATA(py_norm);
 
     //get the total number of points
-    int n =  PyArray_SIZE(py_x);
+    n =  PyArray_SIZE(py_x);
 
     //call the actual gridder routine
-    int result = gridder2d(x,y,data,n,nx,ny,xmin,xmax,ymin,ymax,odata,norm,flags);
+    result = gridder2d(x,y,data,n,nx,ny,xmin,xmax,ymin,ymax,odata,norm,flags);
     return Py_BuildValue("i",&result);
 
 }
@@ -86,7 +88,9 @@ int gridder2d(double *x,double *y,double *data,unsigned int n,
 
     double dx = delta(xmin,xmax,nx);
     double dy = delta(ymin,ymax,ny);
-    
+
+    unsigned int i; //loop index
+
     /*check if normalization array is passed*/
     if(norm==NULL)
     {
@@ -101,7 +105,7 @@ int gridder2d(double *x,double *y,double *data,unsigned int n,
     }
     else
     {
-        if(flags&VERBOSE) 
+        if(flags&VERBOSE)
         {
             fprintf(stdout,"XU.Gridder2D(c): use user provided buffer for normalization data\n");
         }
@@ -109,7 +113,7 @@ int gridder2d(double *x,double *y,double *data,unsigned int n,
     }
 
     /*the master loop over all data points*/
-    for(unsigned int i=0;i<n;i++)
+    for(i=0;i<n;i++)
     {
         //if the x and y values are outside the grids boundaries continue with
         //the next point
@@ -126,10 +130,10 @@ int gridder2d(double *x,double *y,double *data,unsigned int n,
     /*perform normalization*/
     if(!(flags&NO_NORMALIZATION))
     {
-        if(flags&VERBOSE) 
+        if(flags&VERBOSE)
             fprintf(stdout,"XU.Gridder2D(c): perform normalization ...\n");
 
-        for(unsigned int i=0;i<nx*ny;i++)
+        for(i=0;i<nx*ny;i++)
             if(gnorm[i]>1.e-16) odata[i] = odata[i]/gnorm[i];
 
     }
@@ -139,3 +143,5 @@ int gridder2d(double *x,double *y,double *data,unsigned int n,
 
     return(0);
 }
+
+#undef PY_ARRAY_UNIQUE_SYMBOL

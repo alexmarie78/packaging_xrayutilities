@@ -1,3 +1,14 @@
+v1.0.4, 2013-12-22 "the final Linz edition"
+
+* bugfix in GID experimental class: qconv argument so far not used correctly!
+* enhanced fitting routines
+* spec files can now be parsed while gzipped
+* CBF file parser for detector images 
+* compile fixes for Microsoft compilers
+* compile fixes on Mac
+* new predefined materials (NaCl, FeO, Fe3O4, Co3O4,...)
+* some minor bug fixes
+
 v1.0.3, 2013-10-25
 
 * build_doc target for setup.py to help build docs (thanks to F. Picca)
