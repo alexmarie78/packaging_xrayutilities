@@ -63,11 +63,12 @@ Angle calculation using the material classes
 
 Calculation of angles needed to align Bragg reflections in various diffraction geometries is done using the Materials defined in the :mod:`materials`-package.
 This package provides a set of classes to describe crystal lattices and materials.
-Once such a material is properly defined one can calculate its properties, which includes the reciprocal lattice points, optical properties like 
+Once such a material is properly defined one can calculate its properties, which includes the reciprocal lattice points, lattice plane distances, optical properties like 
 the refractive index, the structure factor (including the atomic scattering factor) and the complex polarizability.
 These atomic properties are extracted from a database included in *xrayutilities*.
 
-Using such a material and an experimental class from the :mod:`experiment`-module describing the experimental setup the needed diffraction angles can be calculated for certain coplanar diffraction (high, low incidence), grazing incidence diffraction and also special non-coplanar diffraction geometries.
+Using such a material and an experimental class from the :mod:`experiment`-module, describing the experimental setup, the needed diffraction angles can be calculated for certain coplanar diffraction (high, low incidence), grazing incidence diffraction and also special non-coplanar diffraction geometries. 
+In the predefined experimental classes fixed geometries are used. For angle calculation of custom geometries using arbitrary geometries (max. of three free angles) the :mod:`q2ang_fit`-module can be used as described in one of the included example files.
 
 .. _helloworld:
 
@@ -118,7 +119,7 @@ Detailed instructions
 
 Installing *xrayutilities* is done using Python's distutils
 
-The package can be installed on Linux, Mac OS X and Microsoft Windows, however it is mostly tested on Linux/Unix platforms. 
+The package can be installed on Linux, Mac OS X and Microsoft Windows, however, it is mostly tested on Linux/Unix platforms. 
 Please inform one of the authors in case the installation fails!
 
 Required third party software
@@ -192,11 +193,12 @@ Notes for installing on Windows
 -------------------------------
 
 Since there is no packages manager on Windows the packages need to be installed manual 
-(including all the dependecies) or a pre-packed solution needs to be used. We strongly suggest to
-use the `pyhton(x,y) <https://code.google.com/p/pythonxy/>`_ python distribution, 
-which includes already all of the needed dependencies for installing *xrayutilities*.
+(including all the dependecies) or a pre-packed solution needs two be used. We strongly suggest to
+use the `Python(x,y) <https://code.google.com/p/pythonxy/>`_ or 
+`WinPython <http://winpython.sourceforge.net/>`_ python distributions, 
+which include already all of the needed dependencies for installing *xrayutilities*.
 
-The setup of the environment variables is also done by the python(x,y) installation.
+The setup of the environment variables is also done by the python distributions.
 One can proceed with the installation of *xrayutilities* directly!
 The easiest way to do this on windows is to use the binaries distributed on the `Python package index <https://pypi.python.org/pypi/xrayutilities>`_, otherwise one can follow the general installation instructions. 
 Depending on your compiler on Microsoft Windows it might be necessary to perform the building of the Python extension separately and specify the compiler manually. 
@@ -206,7 +208,9 @@ This is done by
 
   python setup.py build -c <compiler_name>
 
-Using Python(x,y) you want to specify "mingw32" as compiler name.
+Using Python(x,y) you want to specify 'mingw32' as compiler name. With the WinPython it 
+is recommended to use the MS Visual Studio Express 2008 (which is freely available for download)
+and can also build the code for 64bit Windows. In this case us 'msvc' as compiler name.
 
 In case you want to do it the hard way install all of the following (versions in brackets indicate the tested set of versions by the author (2.3.2012)):
  * MinGW (0.4alpha)
@@ -216,7 +220,6 @@ In case you want to do it the hard way install all of the following (versions in
  * numexpr (1.4.2) needed for pytables
  * pytables (2.3.1)
  * matplotlib (1.1.0)
- * ipython (0.12)
 
 It is suggested to add the MinGW binary directory, as well as the Python and Python-scripts directory
 to the Path environment variable as described above! Installation is done as described above. 

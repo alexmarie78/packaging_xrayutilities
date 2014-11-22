@@ -35,18 +35,19 @@ An working example for both methods is given in the following.::
     # open spec file or use open SPECfile instance
     try: s
     except NameError:
-        s = xu.io.SPECFile("sample_name.spec",path="./specdir")
+        s = xu.io.SPECFile("sample_name.spec", path="./specdir")
     
     # method (1)
-    scan10 = s[9] # Returns a SPECScan class, note 9 because the list starts at 0
-    scan10.ReadData()
-    scan10data = scan10.data
+    s.scan10.ReadData()
+    scan10data = s.scan10.data
     
     # method (2)
-    h5file = os.path.join("h5dir","h5file.h5")
+    h5file = os.path.join("h5dir", "h5file.h5")
     s.Save2HDF5(h5file) # save content of SPEC file to HDF5 file
     # read data from HDF5 file
-    [angle1,angle2],scan10data = xu.io.geth5_scan(h5file,[10], "motorname1", "motorname2")
+    [angle1, angle2], scan10data = xu.io.geth5_scan(h5file, [10],
+                                                    "motorname1",
+                                                    "motorname2")
 
 
 .. seealso::
@@ -59,14 +60,15 @@ In the following it is shown how to re-parsing the SPEC file for new scans and r
     s.Update() # reparse for new scans in open SPECFile instance
     
     # reread data method (1)
-    scan10 = s[9] # Returns a SPECScan class
-    scan10.ReadData()
-    scan10data = scan10.data 
+    s.scan10.ReadData()
+    scan10data = s.scan10.data 
     
     # reread data method (2)
     s.Save2HDF5(h5) # save content of SPEC file to HDF5 file
     # read data from HDF5 file
-    [angle1,angle2],scan10data = xu.io.geth5_scan(h5file,[10], "motorname1", "motorname2")
+    [angle1, angle2], scan10data = xu.io.geth5_scan(h5file, [10],
+                                                    "motorname1",
+                                                    "motorname2")
 
 
 Reading EDF files
@@ -80,18 +82,18 @@ EDF files are mostly used to store CCD frames at ESRF recorded from various diff
     
     specfile = "specfile.spec"
     h5file = "h5file.h5"
-    h5 = tables.openFile(h5file,mode='a')
+    h5 = tables.openFile(h5file, mode='a')
     
-    s = xu.io.SPECFile(specfile,path=specdir)
+    s = xu.io.SPECFile(specfile, path=specdir)
     s.Save2HDF5(h5) # save to hdf5 file
     
     # read ccd frames from EDF files
-    for i in range(1,1000,1):
+    for i in range(1, 1000, 1):
         efile = "edfdir/sample_%04d.edf" %i
-        e = xu.io.edf.EDFFile(efile,path=specdir)
+        e = xu.io.edf.EDFFile(efile, path=specdir)
         e.ReadData()
-        g5 = h5.createGroup(h5.root,"frelon_%04d" %i)
-        e.Save2HDF5(h5,group=g5)
+        g5 = h5.createGroup(h5.root, "frelon_%04d" %i)
+        e.Save2HDF5(h5, group=g5)
     
     h5.close()
 
@@ -123,33 +125,32 @@ Methods for high angle x-ray diffraction experiments. Mostly for experiments per
     Si = xu.materials.Si  # load material from materials submodule
     
     # initialize experimental class with directions from experiment
-    hxrd = xu.HXRD(Si.Q(1,1,-2),Si.Q(1,1,1))
+    hxrd = xu.HXRD(Si.Q(1, 1, -2), Si.Q(1, 1, 1))
     # calculate angles of Bragg reflections and print them to the screen
-    om,chi,phi,tt = hxrd.Q2Ang(Si.Q(1,1,1))
+    om, chi, phi, tt = hxrd.Q2Ang(Si.Q(1, 1, 1))
     print("Si (111)")
-    print("om,tt: %8.3f %8.3f" %(om,tt))
-    om,chi,phi,tt = hxrd.Q2Ang(Si.Q(2,2,4))
+    print("om,tt: %8.3f %8.3f" % (om, tt))
+    om, chi, phi, tt = hxrd.Q2Ang(Si.Q(2, 2, 4))
     print("Si (224)")
-    print("om,tt: %8.3f %8.3f" %(om,tt))
+    print("om,tt: %8.3f %8.3f" % (om, tt))
 
-Note that on line 5 the ``HXRD`` class is initialized without specifying the energy used in the experiment. It will use the default energy stored in the configuration file, which defaults to CuK :math:`\alpha_1`.
+Note that on line 5 the ``HXRD`` class is initialized without specifying the energy used in the experiment. It will use the default energy stored in the configuration file, which defaults to CuK-alpha1.
 
 One could also call::
 
-    hxrd = xu.HXRD(Si.Q(1,1,-2),Si.Q(1,1,1),en=10000) # energy in eV
+    hxrd = xu.HXRD(Si.Q(1, 1, -2), Si.Q(1, 1, 1), en=10000) # energy in eV
 
 to specify the energy explicitly.
 The ``HXRD`` class by default describes a four-circle goniometer as described in more detail `here <http://www.certif.com/spec_manual/fourc_4_1.html>`_.
 
 Similar functions exist for other experimental geometries. For grazing incidence diffraction one might use::
 
-    gid = xu.GID(Si.Q(1,-1,0),Si.Q(0,0,1))
+    gid = xu.GID(Si.Q(1, -1, 0), Si.Q(0, 0, 1))
     # calculate angles and print them to the screen
-    (alphai,azimuth,tt,beta) = gid.Q2Ang(Si.Q(2,-2,0))
-    print("azimuth,tt: %8.3f %8.3f" %(azimuth,tt))
+    (alphai, azimuth, tt, beta) = gid.Q2Ang(Si.Q(2, -2, 0))
+    print("azimuth,tt: %8.3f %8.3f" % (azimuth, tt))
 
-There are two implementations for GID experiments. Both describe 2S+2D diffractometers.
-They differ by the order of the detector circles. One describes a setup as available at ID10B/ESRF.
+There is on implementation of a GID 2S+2D diffractometer. Be sure to check if the order of the detector circles fits your goniometer, otherwise define one yourself!
 
 There exists also a powder diffraction class, which is able to convert powder scans from angular to reciprocal space and furthermore powder scans of materials can be simulated in a very primitive way, which should only be used to get an idea of the peak positions expected from a certain material.
 
@@ -158,27 +159,29 @@ There exists also a powder diffraction class, which is able to convert powder sc
     import xrayutilities as xu
     import matplotlib.pyplot as plt
     
-    energy = (2*8048 + 8028)/3. # copper k alpha 1,2
+    energy = (2 * 8048 + 8028) / 3. # copper k alpha 1,2
     
     # creating Indium powder 
-    In_powder = xu.Powder(xu.materials.In,en=energy)
+    In_powder = xu.Powder(xu.materials.In, en=energy)
     # calculating the reflection strength for the powder
     In_powder.PowderIntensity()
     
     # convoluting the peaks with a gaussian in q-space
     peak_width = 0.01 # in q-space
     resolution = 0.0005 # resolution in q-space
-    In_th,In_int = In_powder.Convolute(resolution,peak_width)
+    In_th,In_int = In_powder.Convolute(resolution, peak_width)
     
     plt.figure()
     plt.xlabel(r"2Theta (deg)"); plt.ylabel(r"Intensity")
     # plot the convoluted signal
-    plt.plot(In_th*2,In_int/In_int.max(),'k-',label="Indium powder convolution")
+    plt.plot(In_th * 2, In_int / In_int.max(), 'k-',
+             label="Indium powder convolution")
     # plot each peak in a bar plot
-    plt.bar(In_powder.ang*2, In_powder.data/In_powder.data.max(), width=0.3, bottom=0, 
-            linewidth=0, color='r',align='center', orientation='vertical',label="Indium bar plot")
+    plt.bar(In_powder.ang * 2, In_powder.data / In_powder.data.max(),
+            width=0.3, bottom=0, linewidth=0, color='r',
+            align='center', orientation='vertical', label="Indium bar plot")
     
-    plt.legend(); plt.set_xlim(15,100); plt.grid()
+    plt.legend(); plt.set_xlim(15, 100); plt.grid()
 
 One can also print the peak positions and other informations of a powder by
 
@@ -204,6 +207,42 @@ One can also print the peak positions and other informations of a powder by
        [-1, -1, -2]    54.4859      3.731        50.75       23.31
        ....
 
+Using the ``Gridder`` classes
+-----------------------------
+
+*xrayutilities* provides Gridder classes for 1D, 2D, and 3D data sets. These Gridders map irregular spaced data onto a regular grid. 
+This is often needed after transforming data measured at equally spaced angular positions to reciprocal space were their spacing is irregular.
+
+In 1D this process actually equals the calculation of a histogramm. 
+Below you find the most basic way of using the Gridder in 2D. Other dimensions work very similar.
+
+The most easiest use (what most user might need) is:
+
+::
+    import xrayutilities as xu # import python package
+    g = xu.Gridder2D(100, 101) # initialize the Gridder object, which will 
+    # perform Gridding to a regular grid with 100x101 points
+    #====== load some data here =====
+    g(x, y, data) # call the gridder with the data
+    griddata = g.data # the data attribute contains the gridded data.
+
+_.. note: previously you could use the Gridder's gdata object, which was always an internal buffer and should not be used anymore!
+
+A more complicated example showing also sequential gridding is shown below. You need sequential gridding when you can not load all data at the same time, which is often problematic with 3D data sets. In such cases you need to specify the data range before the first call to the gridder. 
+
+::
+    import xrayutilities as xu # import python package
+    g = xu.Gridder2D(100, 101) # initialize the Gridder object
+    g.KeepData(True)
+    g.dataRange(1, 2, 3, 4)  # (xgrd_min, xgrd_max, ygrd_min, ygrd_max)
+    #====== load some data here =====
+    g(x, y, data) # call the gridder with the data
+    griddata = g.data # the data attribute contains the so far gridded data.
+
+    #====== load some more data here =====
+    g(x, y, data) # call the gridder with the new data
+    griddata = g.data # the data attribute contains the combined gridded data.
+
 
 Using the ``material`` class
 ----------------------------
@@ -217,33 +256,39 @@ First defining a new material from scratch is shown. This consists of an lattice
 
     import xrayutilities as xu
     
-    # defining a ZincBlendeLattice with two types of atoms and lattice constant a
-    def ZincBlendeLattice(aa,ab,a):
+    # defining a ZincBlendeLattice with two types of atoms
+    # and lattice constant a
+    def ZincBlendeLattice(aa, ab, a):
         #create lattice base
         lb = xu.materials.LatticeBase()
-        lb.append(aa,[0,0,0])
-        lb.append(aa,[0.5,0.5,0])
-        lb.append(aa,[0.5,0,0.5])
-        lb.append(aa,[0,0.5,0.5])
-        lb.append(ab,[0.25,0.25,0.25])
-        lb.append(ab,[0.75,0.75,0.25])
-        lb.append(ab,[0.75,0.25,0.75])
-        lb.append(ab,[0.25,0.75,0.75])
+        lb.append(aa, [0, 0, 0])
+        lb.append(aa, [0.5, 0.5, 0])
+        lb.append(aa, [0.5, 0, 0.5])
+        lb.append(aa, [0, 0.5, 0.5])
+        lb.append(ab, [0.25, 0.25, 0.25])
+        lb.append(ab, [0.75, 0.75, 0.25])
+        lb.append(ab, [0.75, 0.25, 0.75])
+        lb.append(ab, [0.25, 0.75, 0.75])
                 
         #create lattice vectors
-        a1 = [a,0,0]
-        a2 = [0,a,0]
-        a3 = [0,0,a]
+        a1 = [a, 0, 0]
+        a2 = [0, a, 0]
+        a3 = [0, 0, a]
                 
-        l = xu.materials.Lattice(a1,a2,a3,base=lb)    
+        l = xu.materials.Lattice(a1, a2, a3, base=lb)    
         return l
     
     # defining InP, no elastic properties are given, 
-    # helper functions exist to create the (6,6) elastic tensor for cubic materials 
+    # helper functions exist to create the (6, 6) elastic tensor
+    # for cubic materials 
     atom_In = xu.materials.elements.In
     atom_P = xu.materials.elements.P
-    elastictensor = xu.materials.CubicElasticTensor(10.11e+10,5.61e+10,4.56e+10)
-    InP  = xu.materials.Material("InP",ZincBlendeLattice(atom_In, atom_P ,5.8687), elastictensor)
+    elastictensor = xu.materials.CubicElasticTensor(10.11e+10, 5.61e+10,
+                                                    4.56e+10)
+    InP  = xu.materials.Material("InP", 
+                                 ZincBlendeLattice(atom_In, atom_P, 5.8687),
+                                 elastictensor)
+
 
 InP is of course already included in the xu.materials module and can be loaded by::
 
@@ -262,23 +307,23 @@ Using the material properties the calculation of the reflection strength of a Br
     energy= 8048 # eV
     
     # calculate the structure factor for InAs (111) (222) (333)
-    hkllist = [[1,1,1],[2,2,2],[3,3,3]]
+    hkllist = [[1, 1, 1], [2, 2, 2], [3, 3, 3]]
     for hkl in hkllist:
         qvec = InAs.Q(hkl)
-        F = InAs.StructureFactor(qvec,energy)
-        print(" |F| = %8.3f" %numpy.abs(F))
+        F = InAs.StructureFactor(qvec, energy)
+        print(" |F| = %8.3f" % numpy.abs(F))
 
 
 Similar also the energy dependence of the structure factor can be determined::
 
     import matplotlib.pyplot as plt
     
-    energy= numpy.linspace(500,20000,5000) # 500 - 20000 eV
-    F = InAs.StructureFactorForEnergy(InAs.Q(1,1,1),energy)
+    energy= numpy.linspace(500, 20000, 5000) # 500 - 20000 eV
+    F = InAs.StructureFactorForEnergy(InAs.Q(1, 1, 1), energy)
     
     plt.figure(); plt.clf()
-    plt.plot(energy,F.real,'k-',label='Re(F)')
-    plt.plot(energy,F.imag,'r-',label='Imag(F)')
+    plt.plot(energy, F.real, 'k-', label='Re(F)')
+    plt.plot(energy, F.imag, 'r-', label='Imag(F)')
     plt.xlabel("Energy (eV)"); plt.ylabel("F"); plt.legend()
 
 
@@ -290,13 +335,61 @@ It is also possible to calculate the components of the structure factor of atoms
     import numpy
     
     Fe = xu.materials.elements.Fe # iron atom
-    Q = numpy.array([0,0,1.9],dtype=numpy.double)
+    Q = numpy.array([0, 0, 1.9], dtype=numpy.double)
     en = 10000 # energy in eV
     
-    print "Iron (Fe): E: %9.1f eV" % en
-    print "f0: %8.4g" % Fe.f0(numpy.linalg.norm(Q))
-    print "f1: %8.4g" % Fe.f1(en)
-    print "f2: %8.4g" % Fe.f2(en)
+    print("Iron (Fe): E: %9.1f eV" % en)
+    print("f0: %8.4g" % Fe.f0(numpy.linalg.norm(Q)))
+    print("f1: %8.4g" % Fe.f1(en))
+    print("f2: %8.4g" % Fe.f2(en))
+
+
+Calculation of diffraction angles for a general geometry
+--------------------------------------------------------
+
+Often the restricted predefined geometries are not corresponding to the experimental setup, nevertheless *xrayutilities* is able to calculate the goniometer angles needed to reach a certain reciprocal space position.
+
+For this purpose the goniometer together with the geometric restrictions need to be defined and the q-vector in laboratory reference frame needs to be specified.
+This works for arbitrary goniometer, however, the user is expected to set up bounds to put restrictions to the number of free angles to obtain reproducible results. 
+In general only three angles are needed to fit an arbitrary q-vector (2 sample + 1 detector angles or
+1 sample + 2 detector). 
+
+The example below shows the necessary code to perform such an angle calculation for a costum defined material with orthorhombic unit cell.
+
+.. code-block:: python
+
+    import xrayutilities as xu
+    import numpy as np
+
+    def Pnma(a, b, c):
+        #create orthorhombic unit cell
+        l = xu.materials.Lattice([a, 0, 0], [0, b, 0], [0, 0, c])
+        return l
+
+    latticeConstants=[5.600, 7.706, 5.3995]
+    SmFeO3 = xu.materials.Material("SmFeO3", Pnma(*latticeConstants))
+    # 2S+2D goniometer
+    qconv=xu.QConversion(('x+', 'z+'), ('z+', 'x+'), (0, 1, 0))
+    # [1,1,0] surface normal
+    hxrd = xu.HXRD(SmFeO3.Q(0, 0, 1), SmFeO3.Q(1, 1, 0), qconv=qconv)
+
+    hkl=(2, 0, 0)
+    q_material = SmFeO3.Q(hkl)
+    q_laboratory = hxrd.Transform(q_material) # transform 
+
+    print('SmFeO3: \thkl ', hkl, '\tqvec ', np.round(q_material, 5))
+    print('Lattice plane distance: %.4f' % SmFeO3.planeDistance(hkl))
+
+    #### determine the goniometer angles with the correct geometry restrictions
+    # tell bounds of angles / (min,max) pair or fixed value for all motors
+    # maximum of three free motors! here incidence angle fixed to 5 degree
+    # om, phi, tt, delta
+    bounds = (5, (-180, 180), (-1, 90), (-1, 90))
+    ang,qerror,errcode = xu.Q2AngFit(q_laboratory, hxrd, bounds)
+    print('err %d (%.3g) angles %s' % (errcode, qerror, str(np.round(ang, 5))))
+    # check that qerror is small!!
+    print('sanity check with back-transformation (hkl): ', 
+          np.round(hxrd.Ang2HKL(*ang,mat=SmFeO3),5))
 
 
 User-specific config file
@@ -331,7 +424,8 @@ An example of such a user config file is shown below:
 
     # number of threads to use in parallel sections of the code
     nthreads = 1
-    #   0: the maximum number of available threads will be used (as returned by omp_get_max_threads())
+    #   0: the maximum number of available threads will be used (as returned by
+    #      omp_get_max_threads())
     #   n: n-threads will be used 
 
 
@@ -391,12 +485,14 @@ A possible output of this script could be
     please check the resulting data (consider setting plot=True)
     detector rotation axis / primary beam direction (given by user): ['z+', 'y-'] / x+
     detector pixel directions / distance: z- y+ / 1
-    detector initialization with: init_area('z-','y+',cch1=140.07,cch2=998.34,Nch1=516,Nch2=516, pwidth1=4.4545e-05,pwidth2=4.4996e-05,distance=1.,detrot=-0.792,tiltazimuth=72.0,tilt=1.543)
+    detector initialization with: init_area('z-', 'y+', cch1=140.07, 
+    cch2=998.34, Nch1=516, Nch2=516, pwidth1=4.4545e-05, pwidth2=4.4996e-05,
+    distance=1., detrot=-0.792, tiltazimuth=72.0, tilt=1.543)
     AND ALWAYS USE an (additional) OFFSET of -1.9741deg in the OUTER DETECTOR ANGLE!
 
 
 The output gives the fitted detector parameters and compiles the python code line one needs to use to initialize the detector.
-Important to note is that the outer angle offset which was determined by the fit (-1.9741 degree in the aboves example) is not included in the initialization of the detector parameters BUT needs to be used in every call to the q-conversion function as offset. 
+Important to note is that the outer angle offset which was determined by the fit (-1.9741 degree in the aboves example) is not included in the initialization of the detector parameters *but* needs to be used in every call to the q-conversion function as offset. 
 This step needs to be performed manually by the user!
 
 Area detector (Variant 2)

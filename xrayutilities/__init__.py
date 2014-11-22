@@ -14,15 +14,15 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright (C) 2009 Eugen Wintersberger <eugen.wintersberger@desy.de>
-# Copyright (C) 2009-2011 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2014 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 """
-xrayutilities is a Python package for assisting with x-ray diffraction experiments. Its the
-python package included in *xrayutilities*.
+xrayutilities is a Python package for assisting with x-ray diffraction
+experiments. Its the python package included in *xrayutilities*.
 
 It helps with planning experiments as well as analyzing the data.
 
-Authors: 
+Authors:
  Dominik Kriegner <dominik.kriegner@gmail.com> and
  Eugen Wintersberger <eugen.wintersberger@desy.de>
 """
@@ -43,16 +43,21 @@ from .experiment import GISAXS
 from .experiment import Powder
 from .experiment import QConversion
 
+from .q2ang_fit import Q2AngFit
+
 from .normalize import blockAverage1D
 from .normalize import blockAverage2D
 from .normalize import blockAveragePSD
 from .normalize import IntensityNormalizer
 
+from .gridder import npyGridder1D
 from .gridder import Gridder1D
 from .gridder2d import Gridder2D
+from .gridder2d import Gridder2DList
 from .gridder3d import Gridder3D
 
 from .utilities import maplog
 from .utilities import lam2en
+from .utilities import en2lam
 from .utilities import wavelength
 from .utilities import energy

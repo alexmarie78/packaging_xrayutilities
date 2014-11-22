@@ -17,12 +17,7 @@
  * Copyright (C) 2013 Dominik Kriegner <dominik.kriegner@gmail.com>
 */
 
-#include <Python.h>
-
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#define PY_ARRAY_UNIQUE_SYMBOL XU_UNIQUE_SYMBOL
-#define NO_IMPORT_ARRAY
-#include <numpy/arrayobject.h>
+#include "xrayutilities.h"
 
 #include <stdio.h>
 
@@ -31,26 +26,26 @@ PyObject* cbfread(PyObject *self, PyObject *args) {
      *
      * Parameters
      * ----------
-     *  data:   data stream (character array)
-     *  nx,ny:  number of entries of the two dimensional image
+     *  data:    data stream (character array)
+     *  nx, ny:  number of entries of the two dimensional image
      *
      * Returns
      * -------
      *  the parsed data values as float ndarray
      */
 
-    unsigned int i,start=0,nx,ny,len;
+    unsigned int i, start = 0, nx, ny, len;
     unsigned int parsed = 0;
-    PyArrayObject *input=NULL, *outarr=NULL;
+    PyArrayObject *outarr = NULL;
     unsigned char *cin;
     float *cout;
     npy_intp nout;
-   
+
     int cur  = 0;
     int diff = 0;
     unsigned int np = 0;
 
-    union { 
+    union {
         const unsigned char*  uint8;
         const unsigned short* uint16;
         const unsigned int*   uint32;
@@ -58,38 +53,40 @@ PyObject* cbfread(PyObject *self, PyObject *args) {
         const          short*  int16;
         const          int*    int32;
     } parser;
-    
-    // Python argument conversion code
-    if (!PyArg_ParseTuple(args, "s#ii", &cin, &len, &nx, &ny)) return NULL;
-    /*printf("stream length: %d\n",len);
-    printf("entries: %d %d\n",nx,ny);*/
 
-    // create output ndarray
-    nout = nx*ny;
-    outarr = (PyArrayObject *) PyArray_SimpleNew(1, &nout, NPY_FLOAT);
-    cout = (float *) PyArray_DATA(outarr);
-    
-    i = 0;
-    while (i<len-10) {   // find the start of the array
-        if ((cin[i]==0x0c)&&(cin[i+1]==0x1a)&&(cin[i+2]==0x04)&&(cin[i+3]==0xd5)) {
-            start = i+4;
-            i = len+10;
-        }
-        i++;
-    } 
-    if(i==len-10) {
-        PyErr_SetString(PyExc_ValueError,"start of data in stream not found!\n");
+    /* Python argument conversion code */
+    if (!PyArg_ParseTuple(args, "s#ii", &cin, &len, &nx, &ny)) {
         return NULL;
     }
-    /*else {
-        printf("found start at %d\n",start);
-    }*/
-    
-    // next while part was taken from pilatus code and adapted by O. Seeck and D. Kriegner
-    parser.uint8 = (const unsigned char*) cin+start;
+    /* debug output
+    printf("stream length: %d\n", len);
+    printf("entries: %d %d\n", nx, ny); */
 
-    while (parsed<(len-start)) {
-        //printf("%d ",parsed);
+    /* create output ndarray */
+    nout = nx * ny;
+    outarr = (PyArrayObject *) PyArray_SimpleNew(1, &nout, NPY_FLOAT);
+    cout = (float *) PyArray_DATA(outarr);
+
+    i = 0;
+    while (i < len - 10) {  /* find the start of the array */
+        if ((cin[i] == 0x0c) && (cin[i + 1] == 0x1a) &&
+            (cin[i + 2] == 0x04) && (cin[i + 3] == 0xd5)) {
+            start = i + 4;
+            i = len + 10;
+        }
+        i++;
+    }
+    if (i == len - 10) {
+        PyErr_SetString(PyExc_ValueError,
+                        "start of data in stream not found!");
+        return NULL;
+    }
+
+    /* next while loop was taken from pilatus code and adapted by O. Seeck
+     *  and D. Kriegner */
+    parser.uint8 = (const unsigned char*) cin + start;
+
+    while (parsed < (len - start)) {
         if (*parser.uint8 != 0x80) {	
 	        diff = (int) *parser.int8;
 	        parser.int8++;
@@ -109,20 +106,19 @@ PyObject* cbfread(PyObject *self, PyObject *args) {
                 diff = (int) *parser.int32;
 	            parser.int32++;
 	            parsed += 4;
-	        }
+	       }
 	    }
 	    cur += diff;
 	    *cout++ = (float) cur;
-        np++;        
-        // check if we already have all data (file might be longer)
-        if(np==nout) {
-            //printf("all data read (%d,%d)\n",np,parsed);
+        np++;
+        /* check if we already have all data (file might be longer) */
+        if (np == nout) {
+            /* printf("all data read (%d,%d)\n", np, parsed); */
             break;
         }
     }
-    
-    // return output array
-    return PyArray_Return(outarr);
-}    
 
-#undef PY_ARRAY_UNIQUE_SYMBOL
+    /* return output array */
+    return PyArray_Return(outarr);
+}
+

@@ -16,7 +16,7 @@
 # Copyright (C) 2009 Eugen Wintersberger <eugen.wintersberger@desy.de>
 # Copyright (C) 2010-2011,2013 Dominik Kriegner <dominik.kriegner@gmail.com>
 
-#import module objects
+# import module objects
 
 from .lattice import Atom
 from .lattice import LatticeBase
@@ -26,11 +26,13 @@ from .lattice import GeneralPrimitiveLattice
 from .lattice import ZincBlendeLattice
 from .lattice import DiamondLattice
 from .lattice import FCCLattice
+from .lattice import FCCSharedLattice
 from .lattice import BCCLattice
 from .lattice import HCPLattice
 from .lattice import BCTLattice
 from .lattice import RockSaltLattice
 from .lattice import RockSalt_Cubic_Lattice
+from .lattice import CsClLattice
 from .lattice import RutileLattice
 from .lattice import BaddeleyiteLattice
 from .lattice import WurtziteLattice
