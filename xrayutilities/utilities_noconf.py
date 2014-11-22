@@ -20,12 +20,24 @@ xrayutilities utilities contains a conglomeration of useful functions
 this part of utilities does not need the config class
 """
 
+import numbers
 import numpy
 import scipy.constants
 
 from .exception import InputError
 
-energies = {'CuKa1': 8047.82310, 'CuKa2': 8027.9117, 'CuKa12': 8041.18, 'CuKb': 8905.337, 'MoKa1': 17479.374 }
+# python 2to3 compatibility
+try:
+    basestring
+except NameError:
+    basestring = str
+
+energies = {
+    'CuKa1': 8047.82310,
+    'CuKa2': 8027.9117,
+    'CuKa12': 8041.18,
+    'CuKb': 8905.337,
+    'MoKa1': 17479.374}
 # wavelength values from International Tables of Crystallography:
 # Vol C, 2nd Ed. page 203
 # CuKa1: 1.54059292(45) the value in bracket is the uncertainty
@@ -34,30 +46,52 @@ energies = {'CuKa1': 8047.82310, 'CuKa2': 8027.9117, 'CuKa12': 8041.18, 'CuKb': 
 # CuKb:  1.392246(14)
 # MoKa1: 0.70931713(41)
 
+
 def lam2en(inp):
     """
-    converts the input energy in eV to a wavelength in Angstrom
-    or the input wavelength in Angstrom to an energy in eV
+    converts the input wavelength in Angstrom to an energy in eV
 
     Parameter
     ---------
-     inp : either an energy in eV or an wavelength in Angstrom
+     inp : wavelength in Angstrom
 
     Returns
     -------
-     float, energy in eV or wavlength in Angstrom
+     float, energy in eV
+
+    Examples
+    --------
+     >>> energy = lam2en(1.5406)
+    """
+    #  E(eV) = h*c/(e * lambda(A)) *1e10
+    inp = wavelength(inp)
+    c = scipy.constants
+    out = c.h * c.speed_of_light / (c.e * inp) * 1e10
+    return out
+
+
+def en2lam(inp):
+    """
+    converts the input energy in eV to a wavelength in Angstrom
+
+    Parameter
+    ---------
+     inp : energy in eV
+
+    Returns
+    -------
+     float, wavlength in Angstrom
 
     Examples
     --------
      >>> lambda = lam2en(8048)
-     >>> energy = lam2en(1.5406)
     """
-    #  E(eV) = h*c/(e * lambda(A)) *1e10
     #  lambda(A) = h*c/(e * E(eV)) *1e10
     inp = energy(inp)
-    out = scipy.constants.h*scipy.constants.speed_of_light/(scipy.constants.e* inp) * 1e10
-
+    c = scipy.constants
+    out = c.h * c.speed_of_light / (c.e * inp) * 1e10
     return out
+
 
 def energy(en):
     """
@@ -68,17 +102,19 @@ def energy(en):
     Parameter
     ---------
 
-     en: energy (scalar ( energy in eV will be returned unchanged)
-                 or string with name of emission line)
+     en: energy either as scalar or array with value in eV, which
+         will be returned unchanged; or string with name of emission line
 
     Returns
     -------
      energy in eV as float
     """
 
-    if numpy.isreal(en):
+    if isinstance(en, numbers.Number):
         return numpy.double(en)
-    elif isinstance(en,basestring):
+    elif isinstance(en, (numpy.ndarray, list, tuple)):
+        return numpy.array(en)
+    elif isinstance(en, basestring):
         return energies[en]
     else:
         raise InputError("wrong type for argument en")
@@ -93,8 +129,9 @@ def wavelength(wl):
     Parameter
     ---------
 
-     wl: wavelength (scalar ( wavelength in Angstrom will be returned unchanged)
-                     or string with name of emission line)
+     wl: wavelength; If scalar or array the wavelength in Angstrom will be
+         returned unchanged, string with emission name is converted to
+         wavelength
 
     Returns
     -------
@@ -102,10 +139,11 @@ def wavelength(wl):
 
     """
 
-    if numpy.isreal(wl):
+    if isinstance(wl, numbers.Number):
         return numpy.double(wl)
-    elif isinstance(wl,basestring):
-        return lam2en(energies[wl])
+    elif isinstance(wl, (numpy.ndarray, list, tuple)):
+        return numpy.array(wl)
+    elif isinstance(wl, basestring):
+        return en2lam(energies[wl])
     else:
         raise InputError("wrong type for argument wavelength")
-

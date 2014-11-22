@@ -18,7 +18,7 @@
  * Copyright (C) 2009-2010 Dominik Kriegner <dominik.kriegner@gmail.com>
 */
 
-/****h* xrayutils/gridder
+/***** xrayutilities/gridder
  * NAME
  *   gridder - module with gridder functions
  * PURPOSE
@@ -33,10 +33,39 @@
 #include <stdio.h>
 #include <Python.h>
 
-/*define flags for the gridder functions*/
+/* define flags for the gridder functions */
 #define NO_DATA_INIT 1
 #define NO_NORMALIZATION 4
 #define VERBOSE 16
+
+/*!
+\brief python interface function
+
+Python interface function for gridder1d. This function is virtually doing all
+the Python related stuff to run gridder1d function.
+\param self reference to the module
+\param args function arguments
+\return return value of the function
+*/
+PyObject* pygridder1d(PyObject *self, PyObject *args);
+
+/*---------------------------------------------------------------------------*/
+/*!
+\brief 1D single threaded gridder
+
+\param x input x-values
+\param data input data
+\param n number of input points
+\param nx number of steps in x-direction
+\param xmin minimm along x-direction
+\param xmax maximum along x-direction
+\param odata output data
+\param norm normalization data
+\param flags control falgs
+*/
+int gridder1d(double *x, double *data, unsigned int n,
+              unsigned int nx, double xmin, double xmax,
+              double *odata, double *norm, int flags);
 
 /*!
 \brief python interface function
@@ -47,9 +76,9 @@ the Python related stuff to run gridder2d function.
 \param args function arguments
 \return return value of the function
 */
-PyObject* pygridder2d(PyObject *self,PyObject *args);
+PyObject* pygridder2d(PyObject *self, PyObject *args);
 
-//-----------------------------------------------------------------------------
+/*---------------------------------------------------------------------------*/
 /*!
 \brief 2D single threaded gridder
 
@@ -67,13 +96,13 @@ PyObject* pygridder2d(PyObject *self,PyObject *args);
 \param norm normalization data
 \param flags control falgs
 */
-int gridder2d(double *x,double *y,double *data,unsigned int n,
-              unsigned int nx,unsigned int ny,
-              double xmin,double xmax,
-              double ymin,double ymax,
-              double *odata,double *norm,int flags);
+int gridder2d(double *x, double *y, double *data, unsigned int n,
+              unsigned int nx, unsigned int ny,
+              double xmin, double xmax,
+              double ymin, double ymax,
+              double *odata, double *norm, int flags);
 
-//-----------------------------------------------------------------------------
+/*---------------------------------------------------------------------------*/
 /*!
 \brief 3D gridder python interface function
 
@@ -83,9 +112,9 @@ the Python related stuff to run gridder2d function.
 \param args function arguments
 \return return value of the function
 */
-PyObject* pygridder3d(PyObject *self,PyObject *args);
+PyObject* pygridder3d(PyObject *self, PyObject *args);
 
-//-----------------------------------------------------------------------------
+/*---------------------------------------------------------------------------*/
 /*!
 \brief single threaded 3d gridder
 
@@ -109,9 +138,8 @@ Gridder code rebinning scatterd data onto a regular grid in 3 dimensions.
 \param norm pointer to optional normalization from previous run
 \param flags gridder flags
 */
-int gridder3d(double *x,double *y,double *z,double *data,unsigned int n,
-              unsigned int nx,unsigned int ny,unsigned int nz,
+int gridder3d(double *x, double *y, double *z, double *data, unsigned int n,
+              unsigned int nx, unsigned int ny, unsigned int nz,
               double xmin, double xmax, double ymin, double ymax,
               double zmin, double zmax,
-              double *odata,double *norm,int flags);
-
+              double *odata, double *norm, int flags);
