@@ -2,30 +2,21 @@
 # -*- makefile -*-
 
 # Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
-
-# to allow build arch only
-WITH_SPHINXDOC = $(shell if [ -x /usr/bin/dh_sphinxdoc ]; then echo "--with sphinxdoc"; fi)
+export DH_VERBOSE=1
+export PYBUILD_NAME=xrayutilities
 
 %:
-	dh $@ --with python2 $(WITH_SPHINXDOC)
+	dh $@ --with python2,python3,sphinxdoc --buildsystem=pybuild
 
 override_dh_auto_clean:
-	dh_auto_clean
 	rm -rf build
+	dh_auto_clean
 
-override_dh_auto_build-indep:
-	python setup.py build
+override_dh_auto_build:
+	dh_auto_build
 	python setup.py build_doc
 
 override_dh_auto_install:
 	dh_numpy
+	dh_numpy3
 	dh_auto_install
-
-override_dh_install:
-	# Install everything excluding the *_d.so debug extensions to python-foo
-	dh_install -X"*_d.so" "debian/tmp/*" -p python-xrayutilities
-	# Install the debug extensions to python-foo-dbg
-	dh_install "debian/tmp/usr/lib/python*/*-packages/xrayutilities/*_d.so" -p python-xrayutilities-dbg
-	# Continue with regular dh_install
-	dh_install
