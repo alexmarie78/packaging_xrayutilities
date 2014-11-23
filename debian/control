@@ -4,6 +4,7 @@ Uploaders: Eugen Wintersberger <eugen.wintersberger@gmail.com>
 Section: science
 Priority: extra
 Build-Depends: debhelper (>= 9),
+               dh-python,
                python-all-dev,
                python-all-dbg,
                python-numpy,
@@ -32,7 +33,7 @@ Depends: ${misc:Depends},
 Recommends: python-matplotlib (>= 1.0)
 Description: Package for xray data reduction and analysis
  xrayutilities is a collection of scripts used to analyze x-ray diffraction
- data. It consists of a python package and several routines coded in C. It
+ data. It consists of a Python package and several routines coded in C. It
  especially useful for the reciprocal space conversion of diffraction data taken
  with linear and area detectors.
 
@@ -43,7 +44,7 @@ Depends: ${misc:Depends},
          ${sphinxdoc:Depends}
 Description: Package for xray data reduction and analysis - documentation
  xrayutilities is a collection of scripts used to analyze x-ray diffraction
- data. It consists of a python package and several routines coded in C. It
+ data. It consists of a Python package and several routines coded in C. It
  especially useful for the reciprocal space conversion of diffraction data taken
  with linear and area detectors.
  .
@@ -62,7 +63,7 @@ Recommends: python-dbg,
             python-tables-dbg
 Description: Package for xray data reduction and analysis - debug extension
  xrayutilities is a collection of scripts used to analyze x-ray diffraction
- data. It consists of a python package and several routines coded in C. It
+ data. It consists of a Python package and several routines coded in C. It
  especially useful for the reciprocal space conversion of diffraction data taken
  with linear and area detectors.
  .
