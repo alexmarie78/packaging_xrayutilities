@@ -14,7 +14,8 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright (C) 2009 Eugen Wintersberger <eugen.wintersberger@desy.de>
-# Copyright (C) 2009-2012,2014 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2012,2014-2015
+#               Dominik Kriegner <dominik.kriegner@gmail.com>
 # Copyright (C) 2012 Tanja Etzelstorfer <tanja.etzelstorfer@jku.at>
 
 """
@@ -30,10 +31,13 @@ import numbers
 
 from . import lattice
 from . import elements
+from . import cif
 from .. import math
 from .. import utilities
 from .. import config
 from ..exception import InputError
+
+numpy.seterr(divide='ignore', invalid='ignore')
 
 map_ijkl2ij = {"00": 0, "11": 1, "22": 2,
                "12": 3, "20": 4, "01": 5,
@@ -130,6 +134,23 @@ class Material(object):
             self.thetaDebye = float(thetaDebye)
         else:
             self.thetaDebye = thetaDebye
+
+    @classmethod
+    def fromCIF(cls, ciffilename):
+        """
+        Create a Material from a CIF file. Name and
+
+        Parameters
+        ----------
+         ciffilename:  filename of the CIF file
+
+        Returns
+        -------
+         Material instance
+        """
+        cf = cif.CIFFile(ciffilename)
+        lat = cf.Lattice()
+        return cls(cf.name, lat)
 
     def __getattr__(self, name):
         if name.startswith("c"):
@@ -269,7 +290,7 @@ class Material(object):
                                              self.lattice.a3 * k)
                             distance = numpy.linalg.norm(atpos - refpos)
                             if distance <= maxdist:
-                                l.append((distance, a))
+                                l.append((distance, a, o))
         else:
             for i in range(-Na, Na + 1):
                 for j in range(-Nb, Nb + 1):
@@ -279,19 +300,23 @@ class Material(object):
                                  self.lattice.a3 * k)
                         distance = numpy.linalg.norm(atpos - refpos)
                         if distance <= maxdist:
-                            l.append((distance, '__dummy__'))
+                            l.append((distance, '__dummy__', 1.))
 
         # sort
         l.sort(key=operator.itemgetter(1))
         l.sort(key=operator.itemgetter(0))
         rl = []
-        mult = 1
+        if len(l) >= 1:
+            mult = l[0][2]
+        else:
+            return rl
         for i in range(1, len(l)):
-            if numpy.abs(l[i - 1][0] - l[i][0]) < config.EPSILON:
-                mult += 1
+            if (numpy.abs(l[i - 1][0] - l[i][0]) < config.EPSILON and
+                    l[i - 1][1] == l[i][1]):
+                mult += l[i - 1][2]  # add occupancy
             else:
                 rl.append((l[i - 1][0], l[i - 1][1], mult))
-                mult = 1
+                mult = l[i][2]
         rl.append((l[-1][0], l[-1][1], mult))
 
         return rl
@@ -544,13 +569,11 @@ class Material(object):
 
     def __str__(self):
         ostr = "Material: %s\n" % self.name
-        ostr += "Elastic constants:\n"
-        ostr += "c11 = %e\n" % self.c11
-        ostr += "c12 = %e\n" % self.c12
-        ostr += "c44 = %e\n" % self.c44
-        ostr += "mu  = %e\n" % self.mu
-        ostr += "lam = %e\n" % self.lam
-        ostr += "nu  = %e\n" % self.nu
+        ostr += "Elastic tensor (6x6):\n"
+        d = numpy.get_printoptions()
+        numpy.set_printoptions(precision=2, linewidth=78, suppress=False)
+        ostr += str(self.cij) + '\n'
+        numpy.set_printoptions(d)
         ostr += "Lattice:\n"
         ostr += self.lattice.__str__()
         ostr += "Reciprocal lattice:\n"
@@ -891,7 +914,7 @@ def CubicElasticTensor(c11, c12, c44):
 
     Returns
     -------
-     6x6 materix with elastic constants
+     6x6 matrix with elastic constants
     """
     m = numpy.zeros((6, 6), dtype=numpy.double)
     m[0, 0] = c11
@@ -919,7 +942,7 @@ def HexagonalElasticTensor(c11, c12, c13, c33, c44):
 
     Returns
     -------
-     6x6 materix with elastic constants
+     6x6 matrix with elastic constants
 
     """
     m = numpy.zeros((6, 6), dtype=numpy.double)
@@ -928,9 +951,46 @@ def HexagonalElasticTensor(c11, c12, c13, c33, c44):
     m[3, 3] = m[4, 4] = c44
     m[5, 5] = 0.5 * (c11 - c12)
     m[0, 1] = m[1, 0] = c12
-    m[0, 2] = m[1, 2] = m[2, 0] = m[2, 1] = c12
+    m[0, 2] = m[1, 2] = m[2, 0] = m[2, 1] = c13
 
     return m
+
+
+def WZTensorFromCub(c11ZB, c12ZB, c44ZB):
+    """
+    Determines the hexagonal elastic tensor from the values of the cubic
+    elastic tensor under the assumptions presented in Phys. Rev. B 6, 4546
+    (1972), which are valid for the WZ <-> ZB polymorphs.
+
+    Parameter
+    ---------
+     c11,c12,c44:   independent components of the elastic tensor of cubic
+                    materials
+
+    Returns
+    -------
+     6x6 matrix with elastic constants
+
+    Implementation according to a patch submitted by Julian Stangl
+    """
+    # matrix conversions: cubic (111) to hexagonal (001) direction
+    P = (1 / 6.) * numpy.array([[3, 3, 6],
+                                [2, 4, 8],
+                                [1, 5, -2],
+                                [2, 4, -4],
+                                [2, -2, 2],
+                                [1, -1, 4]])
+    Q = (1 / (3 * numpy.sqrt(2))) * numpy.array([1, -1, -2])
+
+    cZBvec = numpy.array([c11ZB, c12ZB, c44ZB])
+    cWZvec_BAR = numpy.dot(P, cZBvec)
+    delta = numpy.dot(Q, cZBvec)
+    D = numpy.array([delta**2 / cWZvec_BAR[2], 0, -delta**2 / cWZvec_BAR[2],
+                     0, delta**2 / cWZvec_BAR[0], delta**2 / cWZvec_BAR[2]])
+    cWZvec = cWZvec_BAR - D.T
+
+    return HexagonalElasticTensor(cWZvec[0], cWZvec[2], cWZvec[3],
+                                  cWZvec[1], cWZvec[4])
 
 
 # define general material usefull for peak position calculations

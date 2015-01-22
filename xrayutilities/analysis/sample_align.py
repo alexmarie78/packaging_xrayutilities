@@ -198,9 +198,10 @@ def psd_chdeg(angles, channels, stdev=None, usetilt=True, plot=True,
         angr = angles.max() - angles.min()
         angp = numpy.linspace(angles.min() - angr * 0.1,
                               angles.max() + angr * .1, 1000)
-        plt.plot(angp, models._unilin(fittan.beta,
-                 numpy.degrees(numpy.tan(numpy.radians(angp)))),
-                 modelline, label=mlabel, lw=linewidth)
+        if modelline:
+            plt.plot(angp, models._unilin(fittan.beta,
+                     numpy.degrees(numpy.tan(numpy.radians(angp)))),
+                     modelline, label=mlabel, lw=linewidth)
         plt.plot(angp, models._unilin(fitlin.beta, angp), 'k-', label='')
         if usetilt:
             plt.plot(angp, straight_tilt(fittilt.beta, angp),
@@ -221,10 +222,11 @@ def psd_chdeg(angles, channels, stdev=None, usetilt=True, plot=True,
 
         # lower plot to show deviations from linear model
         ax2 = plt.subplot(212, sharex=ax1)
-        plt.plot(angp, models._unilin(fittan.beta,
-                 numpy.degrees(numpy.tan(numpy.radians(angp))))
-                 - models._unilin(fitlin.beta, angp),
-                 modelline, label=mlabel, lw=linewidth)
+        if modelline:
+            plt.plot(angp, models._unilin(fittan.beta,
+                     numpy.degrees(numpy.tan(numpy.radians(angp))))
+                     - models._unilin(fitlin.beta, angp),
+                     modelline, label=mlabel, lw=linewidth)
         if usetilt:
             plt.plot(angp, straight_tilt(fittilt.beta, angp)
                      - models._unilin(fitlin.beta, angp),
@@ -285,7 +287,7 @@ def psd_chdeg(angles, channels, stdev=None, usetilt=True, plot=True,
 
 #################################################
 # channel per degree calculation from scan with
-# linear detector (determined maximum by Gauss fit)
+# linear detector (determined maximum by peak_fit)
 #################################################
 def linear_detector_calib(angle, mca_spectra, **keyargs):
     """
@@ -366,17 +368,25 @@ def linear_detector_calib(angle, mca_spectra, **keyargs):
         # determine maximal usable length of array around peak position
         Nuse = min(maxp + N // 2, len(row) - 1) - max(maxp - N // 2, 0)
         # print("%d %d %d"%(N,max(maxp-N//2,0),min(maxp+N//2,len(row)-1)))
-        param, perr, itlim = math.gauss_fit(
+        param, perr, itlim = math.peak_fit(
             numpy.arange(Nuse),
-            row[max(maxp - N // 2, 0):min(maxp + N // 2, len(row) - 1)])
-        param[0] += max(maxp - N // 2, 0)
-        pos.append(param[0])
-        posstd.append(perr[0])
-        ang.append(angle[i])
+            row[max(maxp - N // 2, 0):min(maxp + N // 2, len(row) - 1)],
+            peaktype='PseudoVoigt')
+        if param[0] > 0 and param[0] < Nuse and perr[0] < Nuse/2.:
+            param[0] += max(maxp - N // 2, 0)
+            pos.append(param[0])
+            posstd.append(perr[0])
+            ang.append(angle[i])
 
     ang = numpy.array(ang)
     pos = numpy.array(pos)
     posstd = numpy.array(posstd)
+    if config.VERBOSITY >= config.INFO_ALL:
+        print("XU.analysis.linear_detector_calib: using %d out of %d given "
+              "spectra." % (len(ang), len(angle)))
+    if config.VERBOSITY >= config.DEBUG:
+        print("XU.analysis.linear_detector_calib: determined peak positions:")
+        print(zip(pos, posstd))
 
     detparam = psd_chdeg(ang, pos, stdev=posstd, **keyargs)
     if numpy.sign(detparam[0]) > 0:
@@ -2140,10 +2150,10 @@ def fit_bragg_peak(om, tt, psd, omalign, ttalign, exphxrd, frange=(0.03, 0.03),
         [qx, qy, qz] = exphxrd.Ang2Q(om, tt)
     [qxsub, qysub, qzsub] = exphxrd.Ang2Q(omalign, ttalign)
     params = [qysub, qzsub, 0.001, 0.001, psd.max(), 0, 0.]
+    drange = [qysub - frange[0], qysub + frange[0], qzsub - frange[1],
+              qzsub + frange[1]]
     params, covariance = math.fit_peak2d(
-        qy.flatten(), qz.flatten(), psd.flatten(), params,
-        [qysub - frange[0], qysub + frange[0], qzsub - frange[1],
-         qzsub + frange[1]],
+        qy.flatten(), qz.flatten(), psd.flatten(), params, drange,
         func, maxfev=10000)
     # correct params
     params[6] = params[6] % (numpy.pi)
@@ -2161,8 +2171,10 @@ def fit_bragg_peak(om, tt, psd, omalign, ttalign, exphxrd, frange=(0.03, 0.03),
         plt.clf()
         from ..gridder2d import Gridder2D
         from .. import utilities
-        gridder = Gridder2D(400, 400)
-        gridder(qy, qz, psd)
+        gridder = Gridder2D(50, 50)
+        mask = (qy.flatten() > drange[0]) * (qy.flatten() < drange[1]) * \
+               (qz.flatten() > drange[2]) * (qz.flatten() < drange[3])
+        gridder(qy.flatten()[mask], qz.flatten()[mask], psd.flatten()[mask])
         # calculate intensity which should be plotted
         INT = utilities.maplog(gridder.data.transpose(), 4, 0)
         QXm = gridder.xmatrix
