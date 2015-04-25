@@ -224,12 +224,12 @@ def psd_chdeg(angles, channels, stdev=None, usetilt=True, plot=True,
         ax2 = plt.subplot(212, sharex=ax1)
         if modelline:
             plt.plot(angp, models._unilin(fittan.beta,
-                     numpy.degrees(numpy.tan(numpy.radians(angp))))
-                     - models._unilin(fitlin.beta, angp),
+                     numpy.degrees(numpy.tan(numpy.radians(angp)))) -
+                     models._unilin(fitlin.beta, angp),
                      modelline, label=mlabel, lw=linewidth)
         if usetilt:
-            plt.plot(angp, straight_tilt(fittilt.beta, angp)
-                     - models._unilin(fitlin.beta, angp),
+            plt.plot(angp, straight_tilt(fittilt.beta, angp) -
+                     models._unilin(fitlin.beta, angp),
                      modeltilt, label=mtiltlabel, lw=linewidth)
         if stdev is None:
             plt.plot(angles, channels - models._unilin(fitlin.beta, angles),
@@ -439,7 +439,8 @@ def linear_detector_calib(angle, mca_spectra, **keyargs):
 def area_detector_calib(angle1, angle2, ccdimages, detaxis, r_i, plot=True,
                         cut_off=0.7, start=(0, 0, 0, 0),
                         fix=(False, False, False, False),
-                        fig=None, wl=None, plotlog=False, debug=False):
+                        fig=None, wl=None, plotlog=False, debug=False,
+                        nwindow=50):
     """
     function to calibrate the detector parameters of an area detector
     it determines the detector tilt possible rotations and offsets in the
@@ -472,6 +473,10 @@ def area_detector_calib(angle1, angle2, ccdimages, detaxis, r_i, plot=True,
                   affect the scaling of the error
         plotlog . flag to specify if the created error plot should be on
                   log-scale
+        nwindow . window size for determination of the center of mass position
+                  after the center of mass of every full image is determined,
+                  the center of mass is determined again using a window of
+                  size nwindow in order to reduce the effect of hot pixels.
         debug ... flag to specify that you want to see verbose output and
                   saving of images to show if the CEN determination works
 
@@ -512,15 +517,23 @@ def area_detector_calib(angle1, angle2, ccdimages, detaxis, r_i, plot=True,
     if debug:
         print("average intensity per image: %.1f" % avg)
 
+    nw = nwindow // 2
     for i in range(Npoints):
         img = ccdimages[i]
         if numpy.sum(img) > cut_off * avg:
-            [cen1, cen2] = center_of_mass(img)
+            [cen1r, cen2r] = center_of_mass(img)
+            [cen1, cen2] = center_of_mass(
+                img[max(int(cen1r) - nw, 0):
+                    min(int(cen1r) + nw, img.shape[0]),
+                    max(int(cen2r) - nw, 0):
+                    min(int(cen2r) + nw, img.shape[1])])
+            cen1 += max(int(cen1r) - nw, 0)
+            cen2 += max(int(cen2r) - nw, 0)
             if debug:
                 plt.figure("_ccd")
                 plt.imshow(utilities.maplog(img), origin='low')
                 plt.plot(cen2, cen1, "wo", mfc='none')
-                plt.axis([cen2 - 25, cen2 + 25, cen1 - 25, cen1 + 25])
+                plt.axis([cen2 - nw, cen2 + nw, cen1 - nw, cen1 + nw])
                 plt.savefig("xu_calib_ccd_img%d.png" % i)
                 plt.close("_ccd")
 
@@ -528,9 +541,9 @@ def area_detector_calib(angle1, angle2, ccdimages, detaxis, r_i, plot=True,
             n2 = numpy.append(n2, cen2)
             ang1 = numpy.append(ang1, angle1[i])
             ang2 = numpy.append(ang2, angle2[i])
-            # if debug:
-            #     print("%8.3f %8.3f \t%.2f %.2f" % (angle1[i], angle2[i],
-            #           cen1, cen2))
+            if debug:
+                print("%8.3f %8.3f \t%.2f %.2f" % (angle1[i], angle2[i],
+                      cen1, cen2))
     Nused = len(ang1)
 
     if debug:
@@ -764,7 +777,7 @@ def _determine_detdir(ang1, ang2, n1, n2, detaxis, r_i):
 
 def _area_detector_calib_fit(ang1, ang2, n1, n2, detaxis, r_i, detdir1,
                              detdir2, start=(0, 0, 0, 0),
-                             fix = (False, False, False, False),
+                             fix=(False, False, False, False),
                              full_output=False, wl=1., debug=False):
     """
     INTERNAL FUNCTION
@@ -967,8 +980,9 @@ def _area_detector_calib_fit(ang1, ang2, n1, n2, detaxis, r_i, detdir1,
             dAngles = numpy.concatenate((dAngles, arg))
         # add detector rotation around primary beam
         dAngles = numpy.concatenate((dAngles,
-                                     numpy.ones(arg.shape, dtype=numpy.double)
-                                     * _area_rot))
+                                     numpy.ones(arg.shape,
+                                                dtype=numpy.double) *
+                                     _area_rot))
 
         # read channel numbers
         n1 = numpy.array((), dtype=numpy.double)
@@ -1104,7 +1118,7 @@ def _area_detector_calib_fit(ang1, ang2, n1, n2, detaxis, r_i, detdir1,
         ifixb += (int(not fix[i]),)
 
     my_odr = odr.ODR(data, model, beta0=param, ifixb=(1, 1, 1, 1) + ifixb,
-                     ifixx =(0, 0, 0, 0), stpb=(0.4, 0.4, pwidth1 / 50.,
+                     ifixx=(0, 0, 0, 0), stpb=(0.4, 0.4, pwidth1 / 50.,
                      pwidth2 / 50., 2, 0.125, 0.01, 0.01),
                      sclb=(1 / numpy.abs(cch1), 1 / numpy.abs(cch2),
                      1 / pwidth1, 1 / pwidth2, 1 / 90., 1 / 0.2, 1 / 0.2,
@@ -1270,8 +1284,8 @@ def area_detector_calib_hkl(sampleang, angle1, angle2, ccdimages, hkls,
 
     for i in range(Npoints):
         img = ccdimages[i]
-        if ((numpy.sum(img) > cut_off * avg)
-                or (numpy.all(hkls[i] != (0, 0, 0)))):
+        if ((numpy.sum(img) > cut_off * avg) or
+                (numpy.all(hkls[i] != (0, 0, 0)))):
             [cen1, cen2] = center_of_mass(img)
             if debug:
                 plt.figure("_ccd")
@@ -1873,7 +1887,7 @@ def _area_detector_calib_fit2(sang, ang1, ang2, n1, n2, hkls, experiment,
         ifixb += (int(not fix[i]),)
 
     my_odr = odr.ODR(data, model, beta0=param, ifixb=(1, 1, 1, 1) + ifixb,
-                     ifixx =(0, 0, 0, 0, 0, 0, 0, 0),
+                     ifixx=(0, 0, 0, 0, 0, 0, 0, 0),
                      stpb=(0.4, 0.4, pwidth1 / 50., pwidth2 / 50., 2, 0.125,
                            0.01, 0.01, 0.01, 1., 0.0001),
                      sclb=(1 / numpy.abs(cch1), 1 / numpy.abs(cch2),
@@ -2053,14 +2067,20 @@ def miscut_calc(phi, aomega, zeros=None, omega0=None, plot=True):
         # first guess for the parameters
         # omega0,phi0,miscut
         p0 = (om.mean(), a[om.argmax()], om.max() - om.min())
-        fitfunc = lambda p, phi: numpy.abs(p[2]) * \
-            numpy.cos(numpy.radians(phi - (p[1] % 360.))) + p[0]
+
+        def fitfunc(p, phi):
+            return numpy.abs(p[2]) * \
+                numpy.cos(numpy.radians(phi - (p[1] % 360.))) + p[0]
+
     else:
         # first guess for the parameters
         p0 = (a[om.argmax()], om.max() - om.min())  # omega0,phi0,miscut
-        fitfunc = lambda p, phi: numpy.abs(p[1]) * \
-            numpy.cos(numpy.radians(phi - (p[0] % 360.))) + omega0
-    errfunc = lambda p, phi, om: fitfunc(p, phi) - om
+
+        def fitfunc(p, phi):
+            return numpy.abs(p[1]) * \
+                numpy.cos(numpy.radians(phi - (p[0] % 360.))) + omega0
+
+    def errfunc(p, phi, om): return fitfunc(p, phi) - om
 
     p1, success = optimize.leastsq(errfunc, p0, args=(a, om), maxfev=10000)
     if config.VERBOSITY >= config.INFO_ALL:
