@@ -20,16 +20,14 @@
 
 # module for handling files stored in the EDF data format developed by the ESRF
 
-import numpy
 import re
 import struct
-import tables
-import os
 import os.path
 import glob
-import gzip
 
-from .helper import xu_open
+import numpy
+import h5py
+
 from .helper import xu_open, xu_h5open
 from .. import config
 
@@ -52,11 +50,17 @@ DataTypeDict = {"SignedByte": "b",
                 "UnsignedShort": "H",
                 "UnsignedInt": "I",
                 "UnsignedLong": "L"}
-
 # SignedLong is only 4byte, on my 64bit machine using SignedLong:"l" caused
 # troubles
 # UnsignedLong is only 4byte, on my 64bit machine using UnsignedLong:"L"
 # caused troubles ("I" works)
+
+
+def makeNaturalName(name):
+    ret = name.replace(" ", "_")
+    ret = ret.replace("-", "_")
+    ret = ret.replace(".", "_")
+    return ret
 
 
 class EDFFile(object):
@@ -341,7 +345,12 @@ class EDFFile(object):
         """
         with xu_h5open(h5f, 'a') as h5:
             if isinstance(group, str):
-                g = h5.getNode(group)
+                if group == '/':
+                    g = h5
+                else:
+                    if group in h5:
+                        del h5[group]
+                    g = h5.create_group(group)
             else:
                 g = group
 
@@ -350,8 +359,7 @@ class EDFFile(object):
             ca_name = os.path.splitext(ca_name)[0]
             # perform a second time for case of .edf.gz files
             ca_name = os.path.splitext(ca_name)[0]
-            ca_name = ca_name.replace("-", "_")
-            ca_name = ca_name.replace(" ", "_")
+            ca_name = makeNaturalName(ca_name)
             if edf_name_start_num.match(ca_name):
                 ca_name = "ccd_" + ca_name
             if config.VERBOSITY >= config.INFO_ALL:
@@ -359,9 +367,10 @@ class EDFFile(object):
 
             # create the array description
             ca_desc = "EDF CCD data from file %s " % (self.filename)
+            kwds = {'fletcher32': True}
+            if comp:
+                kwds['compression'] = 'gzip'
 
-            # create the Atom for the array
-            f = tables.Filters(complevel=7, complib="zlib", fletcher32=True)
             if self.nimages != 1:
                 ca_name += '_{n:04d}'
 
@@ -369,31 +378,18 @@ class EDFFile(object):
             for n in range(self.nimages):
                 if self.nimages != 1:
                     d = self.data[n]
-                s = d.shape
-                a = tables.Atom.from_dtype(d.dtype)
                 name = ca_name.format(n=n)
-                if comp:
-                    try:
-                        ca = h5.createCArray(g, name, a, s, ca_desc,
-                                             filters=f)
-                    except:
-                        h5.removeNode(g, name, recursive=True)
-                        ca = h5.createCArray(g, name, a, s, ca_desc,
-                                             filters=f)
-                else:
-                    try:
-                        ca = h5.createCArray(g, name, a, s, ca_desc)
-                    except:
-                        h5.removeNode(g, name, recursive=True)
-                        ca = h5.createCArray(g, name, a, s, ca_desc)
-                # write the data
-                ca[...] = d[...]
+                try:
+                    ca = g.create_dataset(name, data=d, **kwds)
+                except ValueError:
+                    del g[name]
+                    ca = g.create_dataset(name, data=d, **kwds)
 
-            # finally we have to append the attributes
-            for k in self.header.keys():
-                aname = k.replace(".", "_")
-                aname = aname.replace(" ", "_")
-                ca.attrs.__setattr__(aname, self.header[k])
+                ca.attrs['TITLE'] = ca_desc
+
+                # finally we have to append the attributes
+                for k in self.header.keys():
+                    ca.attrs[makeNaturalName(k)] = self.header[k]
 
 
 class EDFDirectory(object):
@@ -454,21 +450,14 @@ class EDFDirectory(object):
             if isinstance(group, str):
                 if group == "":
                     group = os.path.split(self.datapath)[1]
-                try:
-                    g = h5.getNode(h5.root, group)
-                except:
-                    g = h5.createGroup(h5.root, group)
+                g = h5.get(group)
+                if not g:
+                    g = h5.create_group(group)
             else:
                 g = group
-
-            if "comp" in keyargs:
-                compflag = keyargs["comp"]
-            else:
-                compflag = True
 
             for infile in self.files:
                 # read EDFFile and save to hdf5
                 filename = os.path.split(infile)[1]
                 e = EDFFile(filename, path=self.datapath, **self.init_keyargs)
-                # e.ReadData()
-                e.Save2HDF5(h5, group=g)
+                e.Save2HDF5(h5, group=g, comp=comp)

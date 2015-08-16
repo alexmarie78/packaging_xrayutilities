@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2012, 2014 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2012-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
 """
 module with a function wrapper to scipy.optimize.leastsq
 for fitting of a 2D function to a peak or a 1D Gauss fit with
@@ -31,14 +31,35 @@ from .. import config
 from .. exception import InputError
 from .functions import Gauss1d, Gauss1d_der_x, Gauss1d_der_p
 from .functions import Lorentz1d, Lorentz1d_der_x, Lorentz1d_der_p
-from .functions import PseudoVoigt1d
+from .functions import PseudoVoigt1d, PseudoVoigt1dasym
 
-try:
-    from matplotlib import pyplot as plt
-except ImportError:
-    if config.VERBOSITY >= config.INFO_ALL:
-        print("XU.analysis.sample_align: warning; plotting functionality not"
-              "available")
+
+def linregress(x, y):
+    """
+    fast linregress to avoid usage of scipy.stats which is slow!
+
+    Parameters
+    ----------
+     x,y:   data coordinates and values
+
+    Returns
+    -------
+     p, rsq: parameters of the linear fit (slope, offest) and the R^2 value
+
+    Example
+    -------
+     >>> (k, d), R2 = xu.math.linregress(x, y)
+    """
+    p = numpy.polyfit(x, y, 1)
+
+    # calculation of r-squared
+    f = numpy.polyval(p, x)
+    fbar = numpy.sum(y) / len(y)
+    ssreg = numpy.sum((f-fbar)**2)
+    sstot = numpy.sum((y - fbar)**2)
+    rsq = ssreg / sstot
+
+    return p, rsq
 
 
 def peak_fit(xdata, ydata, iparams=[], peaktype='Gauss', maxit=300,
@@ -56,7 +77,8 @@ def peak_fit(xdata, ydata, iparams=[], peaktype='Gauss', maxit=300,
     keyword parameters:
      iparams:   initial paramters for the fit,
                 determined automatically if not specified
-     peaktype:  type of peak to fit ('Gauss','Lorentz','PseudoVoigt')
+     peaktype:  type of peak to fit: 'Gauss', 'Lorentz', 'PseudoVoigt',
+                'PseudoVoigtAsym'
      maxit:     maximal iteration number of the fit
      background:    type of background, either 'constant' or 'linear'
      plot:      flag to ask for a plot to visually judge the fit
@@ -67,13 +89,21 @@ def peak_fit(xdata, ydata, iparams=[], peaktype='Gauss', maxit=300,
     -------
      params,sd_params,itlim[,fitfunc]
 
-    the parameters as defined in function Gauss1d/Lorentz1d or
-    PseudoVoigt1d(x, *param). In the case of linear background one more
+    the parameters as defined in function Gauss1d/Lorentz1d/PseudoVoigt1d/
+    PseudoVoigt1dasym(x, *param). In the case of linear background one more
     parameter is included! For every parameter the corresponding errors of the
     fit 'sd_params' are returned. A boolean flag 'itlim', which is False in
     the case of a successful fit is added by default. Further the function
     used in the fit can be returned (see func_out).
     """
+    if plot:
+        try:
+            from matplotlib import pyplot as plt
+        except ImportError:
+            if config.VERBOSITY >= config.INFO_ALL:
+                print("XU.math.peak_fit: Warning: plot "
+                      "functionality not available")
+            plot = False
 
     gfunc_dx = None
     gfunc_dp = None
@@ -101,6 +131,12 @@ def peak_fit(xdata, ydata, iparams=[], peaktype='Gauss', maxit=300,
                 return PseudoVoigt1d(x, *param) + x * param[-1]
         else:
             def gfunc(param, x): return PseudoVoigt1d(x, *param)
+    elif peaktype == 'PseudoVoigtAsym':
+        if background == 'linear':
+            def gfunc(param, x):
+                return PseudoVoigt1dasym(x, *param) + x * param[-1]
+        else:
+            def gfunc(param, x): return PseudoVoigt1dasym(x, *param)
     else:
         raise InputError("keyword rgument peaktype takes invalid value!")
 
@@ -119,7 +155,9 @@ def peak_fit(xdata, ydata, iparams=[], peaktype='Gauss', maxit=300,
             numpy.median(ydata)]
         if peaktype in ['Lorentz', 'PseudoVoigt']:
             iparams[1] *= 1/(2 * numpy.sqrt(2 * numpy.log(2)))
-        if peaktype == 'PseudoVoigt':
+        if peaktype == 'PseudoVoigtAsym':
+            iparams.insert(1, iparams[1])
+        if peaktype in ['PseudoVoigt', 'PseudoVoigtAsym']:
             # set ETA parameter to be between Gauss and Lorentz shape
             iparams.append(0.5)
         if background == 'linear':
@@ -153,17 +191,11 @@ def peak_fit(xdata, ydata, iparams=[], peaktype='Gauss', maxit=300,
                   "do not trust the result!")
 
     if plot:
-        try:
-            plt.__name__
-        except NameError:
-            print("XU.math.peak_fit: Warning: plot functionality not "
-                  "available")
-        else:
-            plt.figure('XU:peak_fit')
-            plt.plot(xdata, ydata, 'ko', label='data', mew=2)
-            plt.plot(xdata, gfunc(fit.beta, xdata), 'r-',
-                     label='%s-fit' % peaktype)
-            plt.legend()
+        plt.figure('XU:peak_fit')
+        plt.plot(xdata, ydata, 'ko', label='data', mew=2)
+        plt.plot(xdata, gfunc(fit.beta, xdata), 'r-',
+                 label='%s-fit' % peaktype)
+        plt.legend()
 
     if func_out:
         return fit.beta, fit.sd_beta, itlim, lambda x: gfunc(fit.beta, x)
@@ -480,12 +512,12 @@ def multPeakPlot(x, fpos, fwidth, famp, background, dranges=None,
      fig:  matplotlib figure number or name
      fact: factor to use as multiplicator in the plot
     """
-
     try:
-        plt.__name__
-    except NameError:
-        print("XU.math.multPeakPlot: Warning: plot functionality not "
-              "available")
+        from matplotlib import pyplot as plt
+    except ImportError:
+        if config.VERBOSITY >= config.INFO_ALL:
+            print("XU.math.multPeakPlot: Warning: plot "
+                  "functionality not available")
         return
 
     plt.figure(fig)

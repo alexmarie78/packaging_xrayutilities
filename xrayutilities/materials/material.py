@@ -465,7 +465,7 @@ class Material(object):
             exponentf = 3 / 2. * hbar ** 2 * 1.0e20 / \
                 (m * kb * self.thetaDebye) * (math.Debye1(x) / x + 0.25)
             if config.VERBOSITY >= config.DEBUG:
-                print("XU.materials.StructureFactor: DWF = exp(-W*q**2) W= %g"
+                print("XU.materials.chih: DWF = exp(-W*q**2) W= %g"
                       % exponentf)
             dwf = numpy.exp(-exponentf * math.VecNorm(q) ** 2)
         else:
@@ -636,12 +636,13 @@ class Material(object):
 
         s = 0. + 0.j
         # a: atom, p: position, o: occupancy, b: temperatur-factor
+        qnorm = math.VecNorm(q)
         for a, p, o, b in self.lattice.base:
             r = self.lattice.GetPoint(p)
             if temp == 0:
-                dwf = numpy.exp(-b * math.VecNorm(q) ** 2 /
+                dwf = numpy.exp(-b * qnorm ** 2 /
                                 (4 * numpy.pi) ** 2)
-            f = a.f(q, en) * o
+            f = a.f(qnorm, en) * o
             s += f * numpy.exp(-1.j * math.VecDot(q, r)) * dwf
 
         return s
@@ -795,8 +796,7 @@ class Material(object):
             except ValueError:
                 # add atom type to list and calculate the scattering factor
                 types.append(len(atoms))
-                f_q = at[0].f0(qnorm)
-                f.append((f_q + at[0].f1(en0) + 1.j * at[0].f2(en0)))
+                f.append(at[0].f(qnorm, en0))
                 atoms.append(at[0])
 
         s = 0. + 0.j

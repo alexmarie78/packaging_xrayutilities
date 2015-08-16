@@ -14,7 +14,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright (C) 2014 Raphael Grifone <raphael.grifone@esrf.fr>
-# Copyright (C) 2014 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2014-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 """
 modules to help with the analysis of FastScan data acquired at the ESRF.
@@ -37,9 +37,10 @@ see examples/xrayutilities_kmap_ESRF.py for an example script
 """
 
 import os.path
-import numpy
 import re
 import glob
+
+import numpy
 
 # relative imports
 from . import SPECFile
@@ -374,7 +375,7 @@ class FastScanCCD(FastScan):
             print('XU.io.FastScanCCD: open file %s' % filename)
         e = EDFFile(filename, keep_open=True)
         ccdshape = blockAverage2D(e.ReadData(), nav[0], nav[1], roi=roi).shape
-        self.ccddata = numpy.zeros((nx, ny, ccdshape[0], ccdshape[1]))
+        ccddata = numpy.zeros((nx, ny, ccdshape[0], ccdshape[1]))
         nimage = e.nimages
 
         # go through the gridded data and average the ccdframes
@@ -400,12 +401,12 @@ class FastScanCCD(FastScan):
                             ccdfilt = e.ReadData(imgindex)
                         ccdframe = blockAverage2D(ccdfilt, nav[0], nav[1],
                                                   roi=roi)
-                        self.ccddata[i, j, :, :] += ccdframe
+                        ccddata[i, j, :, :] += ccdframe
                         framecount += 1
-                    self.ccddata[i, j, :, :] = self.ccddata[i, j, :, :] / \
-                        float(framecount)
+                        ccddata[i, j, :, :] = ccddata[i, j, :, :] / \
+                            float(framecount)
 
-        return g2l.xmatrix, g2l.ymatrix, self.ccddata
+        return g2l.xmatrix, g2l.ymatrix, ccddata
 
 
 class FastScanSeries(object):
