@@ -23,11 +23,11 @@ these functions should be used in new parsers since they transparently allow to
 open gzipped and bzipped files
 """
 
-import os
+import os.path
 import gzip
 import bz2
 import sys
-import tables
+import h5py
 
 from .. import config
 from ..exception import InputError
@@ -80,21 +80,21 @@ def xu_open(filename, mode='rb'):
 
 class xu_h5open(object):
     """
-    helper object to decide if a HDF5 file has to opened/closed when
+    helper object to decide if a HDF5 file has to be opened/closed when
     using with a 'with' statement.
     """
     def __init__(self, f, mode='r'):
         """
         Parameters
         ----------
-         f:     filename or tables.file.File instance
+         f:     filename or h5py.File instance
          mode:  mode in which the file should be opened. ignored in case a
                 file handle is passed as f
         """
         self.closeFile = True
         self.fid = None
         self.mode = mode
-        if isinstance(f, tables.file.File):
+        if isinstance(f, h5py.File):
             self.fid = f
             self.closeFile = False
             self.filename = f.filename
@@ -106,10 +106,10 @@ class xu_h5open(object):
 
     def __enter__(self):
         if self.fid:
-            if not self.fid.isopen:
-                self.fid = tables.openFile(self.filename, mode=self.mode)
+            if not self.fid.fid.valid:
+                self.fid = h5py.File(self.filename, self.mode)
         else:
-            self.fid = tables.openFile(self.filename, mode=self.mode)
+            self.fid = h5py.File(self.filename, self.mode)
         return self.fid
 
     def __exit__(self, type, value, traceback):

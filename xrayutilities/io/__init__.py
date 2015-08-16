@@ -19,10 +19,6 @@
 from .helper import xu_open
 from .helper import xu_h5open
 
-from .radicon import rad2hdf5
-from .radicon import hst2hdf5
-from .radicon import selecthst
-
 from .seifert import SeifertScan
 from .seifert import SeifertMultiScan
 from .seifert import getSeifert_map
@@ -50,8 +46,6 @@ from .cbf import CBFDirectory
 from .fastscan import FastScan
 from .fastscan import FastScanCCD
 from .fastscan import FastScanSeries
-
-from .spectra import Spectra
 
 from .panalytical_xml import XRDMLFile
 from .panalytical_xml import getxrdml_map

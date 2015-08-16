@@ -14,28 +14,23 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright (C) 2009-2010 Eugen Wintersberger <eugen.wintersberger@desy.de>
-# Copyright (C) 2009-2012 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 """
 module to handle spectra data
 """
 
-import numpy
-import os
 import re
-import tables
-import os.path
-from numpy import rec
+import os
 import glob
 
-from .. import config
+import numpy
+import numpy.lib.recfunctions
+from numpy import rec
+import h5py
 
-try:
-    import matplotlib
-except ImportError:
-    if config.VERBOSITY >= config.INFO_ALL:
-        print("XU.io.spectra: warning; spectra class plotting "
-              "functionality not available")
+from .helper import xu_h5open
+from .. import config
 
 re_wspaces = re.compile(r"\s+")
 re_colname = re.compile(r"^Col")
@@ -54,11 +49,7 @@ re_col_index = re.compile(r"\d+\s+")
 re_col_type = re.compile(r"\[.+\]")
 re_num = re.compile(r"[0-9]")
 
-re_mca_int_tmp = re.compile(r"%.*i")
-
 dtype_map = {"FLOAT": "f4"}
-
-_absorber_factors = None
 
 
 class SPECTRAFileComments(dict):
@@ -239,7 +230,6 @@ class SPECTRAFile(object):
                 self.mca_stop_index = mcastop
             else:
                 # try to determine the number of MCA spectra automatically
-                # spat = re_mca_int_tmp.sub("*",self.mca_file_template)
                 spat = self.mca_file_template.replace("%i", "*")
                 l = glob.glob(spat)
                 self.mca_start_index = 1
@@ -250,8 +240,7 @@ class SPECTRAFile(object):
             if self.mca_stop_index != 0:
                 self.ReadMCA()
 
-    def Save2HDF5(self, h5file, name, group="/", description="SPECTRA scan",
-                  mcaname="MCA"):
+    def Save2HDF5(self, h5file, name, group="/", mcaname="MCA"):
         """
         Saves the scan to an HDF5 file. The scan is saved to a
         seperate group of name "name". h5file is either a string
@@ -265,101 +254,61 @@ class SPECTRAFile(object):
 
         optional keyword arguments:
          group ............... root group where to store the data
-         description ......... string with a description of the scan
+         mcaname ............. Name of the MCA in the HDF5 file
 
         Return value:
         The method returns None in the case of everything went fine, True
         otherwise.
         """
-        if isinstance(h5file, str):
+        with xu_h5open(h5file, 'w') as h5:
+            # create the group where to store the data
             try:
-                h5 = tables.openFile(h5file, mode="a")
-            except:
-                print("XU.io.spectra.Save2HDF5: cannot open file %s for "
-                      "writing!" % h5file)
+                g = h5.create_group(group + '/' + name)
+            except ValueError:
+                print("XU.io.spectra.Save2HDF5: cannot create group %s for "
+                      "writing data!" % name)
                 return True
 
-        else:
-            h5 = h5file
+            # start with saving scan comments
+            for k in self.comments.keys():
+                try:
+                    g.attrs[k] = self.comments[k]
+                except:
+                    print("XU.io.spectra.Save2HDF5: cannot save file comment "
+                          "%s = %s to group %s!" % (k, self.comments[k], name))
 
-        # create the group where to store the data
-        try:
-            g = h5.createGroup(group, name, title=description,
-                               createparents=True)
-        except:
-            print("XU.io.spectra.Save2HDF5: cannot create group %s for "
-                  "writing data!" % name)
-            if isinstance(h5file, str):
-                h5.close()
-            return True
+            # save scan parameters
+            for k in self.params.keys():
+                try:
+                    g.attrs[k] = self.params[k]
+                except:
+                    print("XU.io.spectra.Save2HDF5: cannot save file parametes"
+                          " %s to group %s!" % (k, name))
 
-        # start with saving scan comments
-        for k in self.comments.keys():
+            # ----------finally we need to save the data -------------------
+            kwds = {'fletcher32': True, 'compression': 'gzip'}
+
             try:
-                h5.setNodeAttr(g, k, self.comments[k])
-            except:
-                print("XU.io.spectra.Save2HDF5: cannot save file comment "
-                      "%s = %s to group %s!" % (k, self.comments[k], name))
-
-        # save scan parameters
-        for k in self.params.keys():
-            try:
-                h5.setNodeAttr(g, k, self.params[k])
-            except:
-                print("XU.io.spectra.Save2HDF5: cannot save file parametes "
-                      "%s to group %s!" % (k, name))
-
-        # ----------finally we need to save the data -------------------
-
-        # first save the data stored in the FIO file
-        tab_desc_dict = {}
-        if self.data.data is not None:
-            for t in self.data.data.dtype.descr:
-                cname = t[0]
-                if len(t[1:]) == 1:
-                    ctype = numpy.dtype((t[1]))
-                else:
-                    ctype = numpy.dtype((t[1], t[2]))
-
-                tab_desc_dict[cname] = tables.Col.from_dtype(ctype)
-
-            # create the table object
-            try:
-                tab = h5.createTable(g, "data", tab_desc_dict, "scan data")
+                dset = g.create_dataset("data", data=self.data.data, **kwds)
             except:
                 print("XU.io.spectra.Save2HDF5: cannot create table for "
                       "storing scan data!")
                 return True
 
-            # now write the data to the tables
-            for rec in self.data.data:
-                for cname in rec.dtype.names:
-                    tab.row[cname] = rec[cname]
-                tab.row.append()
+            # if there is MCA data - store this
+            if self.mca is not None:
+                try:
+                    c = g.create_dataset(mcaname, data=self.mca, **kwds)
+                except:
+                    print("XU.io.spectra.Save2HDF5: cannot create carray %s "
+                          "for MCA data!" % mcaname)
+                    return True
 
-            tab.flush()
+                # set MCA specific attributes
+                c.attrs["channels"] = self.mca_channels
+                c.attrs["nchannels"] = self.mca_channels.shape[0]
 
-        # if there is MCA data - store this
-        if self.mca is not None:
-            a = tables.Float32Atom()
-            f = tables.Filters(complib="zlib", complevel=9, fletcher32=True)
-            try:
-                c = h5.createCArray(g, mcaname, a, self.mca.shape)
-            except:
-                print("XU.io.spectra.Save2HDF5: cannot create carray %s for "
-                      "MCA data!" % mcaname)
-                return True
-
-            c[...] = self.mca[...]
-
-            # set MCA specific attributes
-            h5.setNodeAttr(c, "channels", self.mca_channels)
-            h5.setNodeAttr(c, "nchannels", self.mca_channels.shape[0])
-
-        h5.flush()
-
-        if isinstance(h5file, str):
-            h5.close()
+            h5.flush()
 
         return None
 
@@ -392,163 +341,158 @@ class SPECTRAFile(object):
         """
         Read the data from the file.
         """
-        try:
-            fid = open(self.filename, "r")
-        except:
-            print("XU.io.SPECTRAFile.Read: cannot open data file %s for "
-                  "reading!" % (self.filename))
-            return None
-
-        col_names = ""
+        col_names = []
         col_units = []
-        col_types = ""
+        col_types = []
         rec_list = []
+        with open(self.filename, 'rb') as fid:
+            while True:
+                lbuffer = fid.readline().decode('utf8', 'ignore')
+                if lbuffer == "":
+                    break
+                lbuffer = lbuffer.strip()
 
-        while True:
-            lbuffer = fid.readline()
-            if lbuffer == "":
-                break
-            lbuffer = lbuffer.strip()
-
-            # read the next line if the line starts with a "!"
-            if re_end_section.match(lbuffer):
-                continue
-
-            # select the which section to read
-            if re_comment_section.match(lbuffer):
-                read_mode = 1
-                continue
-
-            if re_parameter_section.match(lbuffer):
-                read_mode = 2
-                continue
-
-            if re_data_section.match(lbuffer):
-                read_mode = 3
-                continue
-
-            # here we decide how to proceed with the data
-            if read_mode == 1:
-                # read the file comments
-                try:
-                    (key, value) = lbuffer.split("=")
-                except:
-                    # avoid annoying output
-                    if config.VERBOSITY >= config.INFO_ALL:
-                        print("XU.io.SPECTRAFile.Read: cannot interpret the "
-                              "comment string: %s" % (lbuffer))
+                # read the next line if the line starts with a "!"
+                if re_end_section.match(lbuffer):
                     continue
 
-                key = key.strip()
-                # remove whitespaces to be conform with natural naming
-                key = key.replace(' ', '')
-                # remove possible number at first position
-                if re_num.findall(key[0]) != []:
-                    key = "_" + key
-                value = value.strip()
-                if config.VERBOSITY >= config.DEBUG:
-                    print("XU.io.SPECTRAFile.Read: comment: k,v: %s, %s"
-                          % (key, value))
+                # select the which section to read
+                if re_comment_section.match(lbuffer):
+                    read_mode = 1
+                    continue
 
-                try:
-                    value = float(value)
-                except:
-                    pass
+                if re_parameter_section.match(lbuffer):
+                    read_mode = 2
+                    continue
 
-                # need to handle the case, that a key may appear several times
-                # in the list
-                kcnt = 0
-                while True:
+                if re_data_section.match(lbuffer):
+                    read_mode = 3
+                    continue
+
+                # here we decide how to proceed with the data
+                if read_mode == 1:
+                    # read the file comments
                     try:
-                        self.comments[key] = value
-                        # if adding the key/value pair to the dictionary
-                        # was successful - leave the loop
-                        break
+                        (key, value) = lbuffer.split("=")
                     except:
-                        key += "_%i" % (kcnt + 2)
+                        # avoid annoying output
+                        if config.VERBOSITY >= config.INFO_ALL:
+                            print("XU.io.SPECTRAFile.Read: cannot interpret "
+                                  "the comment string: %s" % (lbuffer))
+                        continue
 
-                    kcnt += 1
+                    key = key.strip()
+                    # remove whitespaces to be conform with natural naming
+                    key = key.replace(' ', '')
+                    key = key.replace(':', '_')
+                    # remove possible number at first position
+                    if re_num.findall(key[0]) != []:
+                        key = "_" + key
+                    value = value.strip()
+                    if config.VERBOSITY >= config.DEBUG:
+                        print("XU.io.SPECTRAFile.Read: comment: k,v: %s, %s"
+                              % (key, value))
 
-            elif read_mode == 2:
-                # read scan parameters
-                try:
-                    (key, value) = lbuffer.split("=")
-                except:
-                    print("XU.io.SPECTRAFile.Read: cannot interpret the "
-                          "parameter string: %s" % (lbuffer))
-
-                key = key.strip()
-                # remove whitespaces to be conform with natural naming
-                key = key.replace(' ', '')
-                # remove possible number at first position
-                if re_num.findall(key[0]) != []:
-                    key = "_" + key
-                value = value.strip()
-                if config.VERBOSITY >= config.DEBUG:
-                    print("XU.io.SPECTRAFile.Read: parameter: k,v: %s, %s"
-                          % (key, value))
-
-                try:
-                    value = float(value)
-                except:
-                    # if the conversion of the parameter to float
-                    # fails it will be saved as a string
-                    pass
-
-                # need to handle the case, that a key may appear several times
-                # in the list
-                kcnt = 0
-                while True:
                     try:
-                        self.params[key] = value
-                        # if adding the key/value pair to the dictionary
-                        # was successful - leave the loop
-                        break
+                        value = float(value)
                     except:
-                        key += "_%i" % (kcnt + 2)
+                        pass
 
-                    kcnt += 1
+                    # need to handle the case, that a key may appear several
+                    # times in the list
+                    kcnt = 0
+                    while True:
+                        try:
+                            self.comments[key] = value
+                            # if adding the key/value pair to the dictionary
+                            # was successful - leave the loop
+                            break
+                        except:
+                            key += "_%i" % (kcnt + 2)
 
-            elif read_mode == 3:
-                if re_column.match(lbuffer):
+                        kcnt += 1
+
+                elif read_mode == 2:
+                    # read scan parameters
                     try:
-                        unit = re_unit.findall(lbuffer)[0]
-                    except IndexError:
-                        unit = "NONE"
+                        (key, value) = lbuffer.split("=")
+                    except:
+                        print("XU.io.SPECTRAFile.Read: cannot interpret the "
+                              "parameter string: %s" % (lbuffer))
+
+                    key = key.strip()
+                    # remove whitespaces to be conform with natural naming
+                    key = key.replace(' ', '')
+                    key = key.replace(':', '_')
+                    # remove possible number at first position
+                    if re_num.findall(key[0]) != []:
+                        key = "_" + key
+                    value = value.strip()
+                    if config.VERBOSITY >= config.DEBUG:
+                        print("XU.io.SPECTRAFile.Read: parameter: k,v: %s, %s"
+                              % (key, value))
 
                     try:
-                        lval = re_obracket.split(lbuffer)[0]
-                        rval = re_cbracket.split(lbuffer)[-1]
-                        dtype = rval.strip()
-                        l = re_wspaces.split(lval)
-                        index = int(l[1])
-                        name = "".join(l[2:])
-                    except IndexError:
-                        l = re_wspaces.split(lbuffer)
-                        index = int(l[1])
-                        dtype = l[-1]
-                        name = "".join(l[2:-1])
+                        value = float(value)
+                    except:
+                        # if the conversion of the parameter to float
+                        # fails it will be saved as a string
+                        pass
 
-                    # store column definition
-                    self.data.append(
-                        SPECTRAFileDataColumn(index, name, unit, dtype))
+                    # need to handle the case, that a key may appear several
+                    # times in the list
+                    kcnt = 0
+                    while True:
+                        try:
+                            self.params[key] = value
+                            # if adding the key/value pair to the dictionary
+                            # was successful - leave the loop
+                            break
+                        except:
+                            key += "_%i" % (kcnt + 2)
 
-                    if name in col_names.split(","):
-                        name += "%s_1" % name
+                        kcnt += 1
 
-                    col_names += "%s," % name
-                    col_types += "%s," % (dtype_map[dtype])
+                elif read_mode == 3:
+                    if re_column.match(lbuffer):
+                        try:
+                            unit = re_unit.findall(lbuffer)[0]
+                        except IndexError:
+                            unit = "NONE"
 
-                else:
-                    # read data
-                    dlist = re_wspaces.split(lbuffer)
-                    for i in range(len(dlist)):
-                        dlist[i] = float(dlist[i])
+                        try:
+                            lval = re_obracket.split(lbuffer)[0]
+                            rval = re_cbracket.split(lbuffer)[-1]
+                            dtype = rval.strip()
+                            l = re_wspaces.split(lval)
+                            index = int(l[1])
+                            name = "".join(l[2:])
+                            name = name.replace(':', '_')
+                        except IndexError:
+                            l = re_wspaces.split(lbuffer)
+                            index = int(l[1])
+                            dtype = l[-1]
+                            name = "".join(l[2:-1])
+                            name = name.replace(':', '_')
 
-                    rec_list.append(dlist)
+                        # store column definition
+                        self.data.append(
+                            SPECTRAFileDataColumn(index, name, unit, dtype))
 
-        col_names = col_names[:-1]
-        col_types = col_types[:-1]
+                        if name in col_names:
+                            name += "%s_1" % name
+
+                        col_names.append("%s" % name)
+                        col_types.append("%s" % (dtype_map[dtype]))
+
+                    else:
+                        # read data
+                        dlist = re_wspaces.split(lbuffer)
+                        for i in range(len(dlist)):
+                            dlist[i] = float(dlist[i])
+
+                        rec_list.append(dlist)
+
         if config.VERBOSITY >= config.DEBUG:
             print("XU.io.SPECTRAFile.Read: data columns: name,type: %s, %s"
                   % (col_names, col_types))
@@ -557,357 +501,6 @@ class SPECTRAFile(object):
                                              names=col_names)
         else:
             self.data.data = None
-
-
-class Spectra(object):
-
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        self.h5_file = None
-        self.h5_group = None
-        self.abs_factors = None
-
-    def set_abs_factors(self, ff):
-        """
-        Set the global absorber factors in the module.
-        """
-        if isinstance(ff, list):
-            self.abs_factors = numpy.array(ff, dtype=numpy.double)
-        elif isinstance(ff, numpy.ndarray):
-            self.abs_factors = ff
-
-    def recarray2hdf5(self, h5g, rec, name, desc):
-        """
-        Save a record array in an HDF5 file. A pytables table
-        object is used to store the data.
-
-        required input arguments:
-         h5g ................. HDF5 group object or path
-         rec ................ record array
-         name ............... name of the table in the file
-         desc ............... description of the table in the file
-
-        return value:
-         tab ................. a HDF5 table object
-        """
-
-        # to build the table data types and names must be extracted
-        descr = rec.dtype.descr
-        tab_desc = {}
-        cname_list = []
-
-        for d in descr:
-            tab_desc[d[0]] = tables.Col.from_dtype(numpy.dtype(d[1]))
-            cname_list.append(d[0])
-
-        # create the table object
-        try:
-            tab = self.h5_file.createTable(h5g, name, tab_desc, desc)
-        except:
-            print("XU.io.spectra.Spectra: Error creating table object %s!")
-            return None
-
-        # fill in data values
-        for i in range(rec.shape[0]):
-            for k in cname_list:
-                tab.row[k] = rec[k][i]
-
-            tab.row.append()
-
-        tab.flush()
-        self.h5_file.flush()
-
-    def spectra2hdf5(self, dir, fname, mcatemp, name="", desc="SPECTRA data"):
-        """
-        Convert SPECTRA scan data to a HDF5 format.
-
-        required input arguments:
-         dir ............... directory where the scan is stored
-         fname ............. name of the SPECTRA data file
-         mcatemp ........... template for the MCA file names
-
-        optional keyword arguments:
-         name .............. optional name under which to save the data
-                             if empty the basename of the filename will be used
-         desc .............. optional description of the scan
-        """
-
-        (basename, ext) = os.path.splitext(fname)
-        mcadir = os.path.join(dir, name)
-
-        # evaluate keyword arguments
-        if name == "":
-            sg_name = basename
-        else:
-            sg_name = name
-
-        sg_desc = desc
-
-        # check wether an MCA directory exists or not
-        if os.path.exists(mcadir):
-            has_mca = True
-        else:
-            has_mca = False
-
-        fullfname = os.path.join(dir, fname)
-        if not os.path.exists(fullfname):
-            print("XU.io.spectra.Spectra.spectra2hdf5: data file does not "
-                  "exist!")
-            return None
-
-        # read data file
-        (data, hdr) = read_data(fullfname)
-
-        # create a new group to save the scan data in
-        # this group is created below the default group determined by
-        # self.h5_group
-        try:
-            sg = self.h5_file.createGroup(self.h5_group, sg_name, sg_desc)
-        except:
-            print("XU.io.spectra.Spectra.spectra2hdf5: cannot create scan "
-                  "group!")
-            return None
-
-        self.recarray2hdf5(sg, data, "data", "SPECTRA tabular data")
-
-        # write attribute data
-        for k in hdr.keys():
-            self.h5_file.setNodeAttr(sg, "MOPOS_" + k, hdr[k])
-
-        if has_mca:
-            mca = read_mca_dir(mcadir, mcatemp)
-            a = tables.Float64Atom()
-            filter = tables.Filters(complib="zlib", complevel=4,
-                                    fletcher32=True)
-            c = self.h5_file.createCArray(sg, "MCA", a, mca.shape, "MCA data",
-                                          filters=filter)
-            c[...] = mca[...]
-
-        self.h5_file.flush()
-
-        return sg
-
-    def abs_corr(self, data, f, **keyargs):
-        """
-        Perform absorber correction. Data can be either a 1 dimensional data
-        (point detector) or a 2D MCA array. In the case of an array the data
-        array should be of shape (N,NChannels) where N is the number of points
-        in the scan an NChannels the number of channels of the MCA. The
-        absorber values are passed to the function as a 1D array of N elements.
-
-        By default the absorber values are taken form a global variable stored
-        in the module called _absorver_factors. Despite this, costume values
-        can be passed via optional keyword arguments.
-
-        required input arguments:
-         mca ............... matrix with the MCA data
-         f ................. filter values along the scan
-
-        optional keyword arguments:
-         ff ................ custome filter factors
-
-        return value:
-         Array with the same shape as mca with the corrected MCA data.
-        """
-
-        mcan = numpy.zeros(data.shape, dtype=numpy.double)
-
-        if "ff" in keyargs:
-            ff = keyargs["ff"]
-        else:
-            ff = _absorber_factors
-
-        if len(data.shape) == 2:
-            # MCA and matrix data
-            data = data * ff[f][:, numpy.newaxis]
-        elif len(data.shape) == 1:
-            data = data * ff[f]
-
-        return data
-
-
-def get_spectra_files(dirname):
-    """
-    Return a list of spectra files within a directory.
-
-    required input arguments:
-     dirname .............. name of the directory to search
-
-    return values:
-     list with filenames
-    """
-
-    fnlist = os.listdir(dirname)
-    onlist = []
-
-    for fname in fnlist:
-        (name, ext) = os.path.splitext(fname)
-        if ext == ".fio":
-            onlist.append(fname)
-
-    onlist.sort()
-    return onlist
-
-
-def read_mca_dir(dirname, filetemp, sort=True):
-    """
-    Read all MCA files within a directory
-    """
-
-    flist = get_spectra_files(dirname)
-
-    # create a list with the numbers of the files
-    nlist = []
-    for fname in flist:
-        (name, ext) = os.path.splitext(fname)
-        name = name.replace(filetemp, "")
-        nlist.append(int(name))
-
-    if sort:
-        nlist.sort()
-
-    dlist = []
-
-    for i in nlist:
-        fname = os.path.join(dirname, filetemp + "%i.fio")
-        fname = fname % (i)
-        d = read_mca(fname)
-        dlist.append(d.tolist())
-
-    return numpy.array(dlist)
-
-
-def read_mca(fname):
-    """
-    Read a single SPECTRA MCA file.
-
-    required input arguments:
-     fname ............... name of the file to read
-
-    return value:
-     data ................ a numpy array witht the MCA data
-    """
-
-    try:
-        fid = open(fname)
-    except:
-        print("XU.io.spectra.read_mca: cannot open file %s!" % fname)
-        return None
-
-    dlist = []
-    hdr_flag = True
-
-    while True:
-        lbuffer = fid.readline()
-
-        if lbuffer == "":
-            break
-        lbuffer = lbuffer.strip()
-        if lbuffer == "%d":
-            hdr_flag = False
-            lbuffer = fid.readline()
-            continue
-
-        if not hdr_flag:
-            dlist.append(float(lbuffer))
-
-    return numpy.array(dlist, dtype=numpy.double)
-
-
-def read_mcas(ftemp, cntstart, cntstop):
-    """
-    Read MCA data from a SPECTRA MCA directory. The filename is passed as a
-    generic
-    """
-
-    fnums = range(cntstart, cntstop + 1)
-    mcalist = []
-
-    for i in fnums:
-        fname = ftemp % i
-        print("XU.io.spectra.read_mcas: processing file %s ..." % fname)
-        mcalist.append(read_mca(fname))
-
-    return numpy.array(mcalist, dtype=numpy.double)
-
-
-def read_data(fname):
-    """
-    Read a spectra data file (a file with now MCA data).
-
-    required input arguments:
-     fname .................... name of the file to read
-
-    return values: (data,hdr)
-     data .......... numpy record array where the keys are the column names
-     hdr ........... a dictionary with header information
-    """
-
-    try:
-        fid = open(fname, "r")
-    except:
-        print("XU.io.spectra.read_data: cannot open file %s!" % fname)
-        return None
-
-    hdr_dict = {}
-    hdr_flag = False
-    data_flag = False
-    col_cnt = 0  # column counter
-    col_names = []  # list with column names
-    data = []
-
-    fname = os.path.basename(fname)
-    fname, ext = os.path.splitext(fname)
-    print(fname)
-
-    while True:
-        lbuffer = fid.readline()
-        if lbuffer == "":
-            break
-
-        lbuffer = lbuffer.strip()
-        # check for common break conditions
-        # if the line is a comment skip it
-        if lbuffer[0] == "!":
-            continue
-
-        # remove leading and trailing whitespace symbols
-        lbuffer = lbuffer.strip()
-
-        if lbuffer == "%p":
-            hdr_flag = True
-            continue
-
-        if lbuffer == "%d":
-            hdr_flag = False
-            data_flag = True
-            continue
-
-        if hdr_flag:
-            # read header data (initial motor positions)
-            key, value = lbuffer.split("=")
-            key = key.strip()
-            value = value.strip()
-            hdr_dict[key] = float(value)
-
-        if data_flag:
-            # have to read the column names first
-            if re_colname.match(lbuffer):
-                l = re_wspaces.split(lbuffer)
-                col_names.append(l[2].replace(fname.upper() + "_", ""))
-            else:
-                # read data values
-                dlist = re_wspaces.split(lbuffer)
-                # convert strings to float values
-                for i in range(len(dlist)):
-                    dlist[i] = float(dlist[i])
-
-                data.append(dlist)
-
-    # create a record array to hold data
-    data = numpy.rec.fromrecords(data, names=col_names)
-
-    return (data, hdr_dict)
 
 
 def geth5_spectra_map(h5file, scans, *args, **kwargs):
@@ -921,7 +514,7 @@ def geth5_spectra_map(h5file, scans, *args, **kwargs):
 
     Parameters
     ----------
-     h5f:     file object of a HDF5 file opened using pytables
+     h5f:     file object of a HDF5 file opened using h5py
      scans:   number of the scans of the reciprocal space map (int,tuple or
               list)
 
@@ -945,88 +538,67 @@ def geth5_spectra_map(h5file, scans, *args, **kwargs):
                 intensities e.g. MAP['MCA']).
     """
 
-    try:
-        matplotlib.__version__
-    except NameError:
-        print("XU.io.spectra.geth5_spectra_map: ERROR: matplotlib "
-              "functionality not available")
-        return
+    with xu_h5open(h5file) as h5:
+        if "mca" in kwargs:
+            mca = kwargs["mca"]
+        else:
+            mca = "MCA"
 
-    if isinstance(h5file, str):
-        try:
-            h5 = tables.openFile(h5file, mode="r")
-        except:
-            print("XU.io.spectra.geth5_spectra_map: cannot open file %s "
-                  "for reading!" % h5file)
-            return True
+        if "samplename" in kwargs:
+            basename = kwargs["samplename"]
+        else:
+            nodename = list(h5.keys())[0]
+            basenlist = re_underscore.split(nodename)
+            basename = "_".join(basenlist[:-1])
+            if config.VERBOSITY >= config.DEBUG:
+                print("XU.io.spectra.geth5_spectra_map: using \'%s\' as "
+                      "basename" % (basename))
 
-    else:
-        h5 = h5file
+        if isinstance(scans, (list, tuple)):
+            scanlist = scans
+        else:
+            scanlist = list([scans])
 
-    if "mca" in kwargs:
-        mca = kwargs["mca"]
-    else:
-        mca = "MCA"
+        angles = dict.fromkeys(args)
+        for key in angles.keys():
+            angles[key] = numpy.zeros(0)
+        buf = numpy.zeros(0)
+        MAP = numpy.zeros(0)
 
-    if "samplename" in kwargs:
-        basename = kwargs["samplename"]
-    else:
-        nodename = h5.listNodes(h5.root)[0]._v_name
-        basenlist = re_underscore.split(nodename)
-        basename = "_".join(basenlist[:-1])
-        if config.VERBOSITY >= config.DEBUG:
-            print("XU.io.spectra.geth5_spectra_map: using \'%s\' as basename"
-                  % (basename))
+        for nr in scanlist:
+            h5scan = h5.get(basename + "_%05d" % nr)
+            sdata = h5scan.get('data')
+            if mca:
+                mcanode = h5.get(basename + "_%05d/%s" % (nr, mca))
+                mcadata = numpy.asarray(mcanode)
 
-    if isinstance(scans, (list, tuple)):
-        scanlist = scans
-    else:
-        scanlist = list([scans])
+            # append scan data to MAP, where all data are stored
+            mcatemp = mcadata.view([(mca, (mcadata.dtype, mcadata.shape[1]))])
+            sdtmp = numpy.lib.recfunctions.merge_arrays([sdata, mcatemp],
+                                                        flatten=True)
+            if MAP.dtype == numpy.float64:
+                MAP.dtype = sdtmp.dtype
+            MAP = numpy.append(MAP, sdtmp)
 
-    angles = dict.fromkeys(args)
-    for key in angles.keys():
-        angles[key] = numpy.zeros(0)
-    buf = numpy.zeros(0)
-    MAP = numpy.zeros(0)
-
-    for nr in scanlist:
-        h5scan = h5.getNode(h5.root, basename + "_%05d" % nr)
-        sdata = h5scan.data.read()
-        if mca:
-            mcanode = h5.getNode(h5.root, basename + "_%05d/%s" % (nr, mca))
-            mcadata = mcanode.read()
-
-        # append scan data to MAP, where all data are stored
-        sdtmp = matplotlib.mlab.rec_append_fields(
-            sdata,
-            [mca, ], [mcadata, ],
-            dtypes=[(numpy.double, mcadata.shape[1])])
-        if MAP.dtype == numpy.float64:
-            MAP.dtype = sdtmp.dtype
-        MAP = numpy.append(MAP, sdtmp)
-
-        # check type of scan
-        notscanmotors = []
-        for i in range(len(args)):
-            motname = args[i]
-            try:
-                buf = sdata[motname]
-                scanshape = buf.shape
+            # check type of scan
+            notscanmotors = []
+            for i in range(len(args)):
+                motname = args[i]
+                try:
+                    buf = sdata[motname]
+                    scanshape = buf.shape
+                    angles[motname] = numpy.concatenate((angles[motname], buf))
+                except:
+                    notscanmotors.append(i)
+            for i in notscanmotors:
+                motname = args[i]
+                buf = numpy.ones(scanshape) * \
+                    h5.getNodeAttr(h5scan, "%s" % motname)
                 angles[motname] = numpy.concatenate((angles[motname], buf))
-            except:
-                notscanmotors.append(i)
-        for i in notscanmotors:
-            motname = args[i]
-            buf = numpy.ones(scanshape) * \
-                h5.getNodeAttr(h5scan, "%s" % motname)
-            angles[motname] = numpy.concatenate((angles[motname], buf))
 
     retval = []
     for motname in args:
         # create return values in correct order
         retval.append(angles[motname])
-
-    if isinstance(h5file, str):
-        h5.close()
 
     return retval, MAP

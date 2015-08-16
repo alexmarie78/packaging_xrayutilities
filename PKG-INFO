@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: xrayutilities
-Version: 1.1.2
+Version: 1.2.0
 Summary: package for x-ray diffraction data evaluation
 Home-page: http://xrayutilities.sourceforge.net
 Author: Dominik Kriegner
@@ -27,7 +27,7 @@ Description:
         --------
         
         * examples:           directory with example scripts and configurations
-        * python:             directory with the sources for the Python package
+        * xrayutilities:      directory with the sources for the Python package
         * setup.py:           distutils install script used for the package installation
         * xrayutilities.pdf:  pdf-file with documentation of the package
         
@@ -55,8 +55,7 @@ Description:
         
         - Python
         - C-compiler (preferential with OpenMP support)
-        - HDF5
-        - pytables
+        - h5py
         - scipy
         - numpy
         - matplotlib (optionally)
@@ -194,4 +193,4 @@ Classifier: License :: OSI Approved :: GNU General Public License v2 or later (G
 Requires: numpy
 Requires: scipy
 Requires: matplotlib
-Requires: tables
+Requires: h5py
