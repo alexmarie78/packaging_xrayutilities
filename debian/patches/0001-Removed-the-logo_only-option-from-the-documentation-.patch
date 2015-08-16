@@ -7,10 +7,10 @@ Subject: Removed the logo_only option from the documentation build
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/doc/source/conf.py b/doc/source/conf.py
-index f71467c..6c68735 100644
+index 8271825..3c7f510 100644
 --- a/doc/source/conf.py
 +++ b/doc/source/conf.py
-@@ -110,7 +110,7 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+@@ -109,7 +109,7 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
  # Theme options are theme-specific and customize the look and feel of a theme
  # further.  For a list of options available for each theme, see the
  # documentation.
