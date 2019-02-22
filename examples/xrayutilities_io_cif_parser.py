@@ -15,29 +15,18 @@
 #
 # Copyright (C) 2012 Dominik Kriegner <dominik.kriegner@gmail.com>
 
-import xrayutilities as xu
-import numpy
 import os
+
+import numpy
+import xrayutilities as xu
+
 # import matplotlib.pyplot as plt
 
-# parse cif file to get unit cell structure
-cif_cal = xu.materials.CIFFile(os.path.join("data", "Calcite.cif"))
-
 # create material
-Calcite = xu.materials.Material("Calcite", cif_cal.Lattice())
+Calcite = xu.materials.Crystal.fromCIF(os.path.join("data", "Calcite.cif"))
 
 # experiment class with some weird directions
 expcal = xu.HXRD(Calcite.Q(-2, 1, 9), Calcite.Q(1, -1, 4))
 
-powder_cal = xu.Powder(Calcite)
-powder_cal.PowderIntensity()
-th, inte = powder_cal.Convolute(0.002, 0.02)
-
+powder_cal = xu.simpack.PowderDiffraction(Calcite)
 print(powder_cal)
-
-# plt.figure()
-# plt.clf()
-# plt.bar(powder_cal.ang*2,powder_cal.data,align='center')
-# plt.plot(th*2,inte,'k-',lw=2)
-# plt.xlabel("2Theta (deg)")
-# plt.ylabel("Intensity")

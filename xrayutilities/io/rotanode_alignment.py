@@ -19,18 +19,12 @@
 parser for the alignment log file of the rotating anode
 """
 
-import numpy
 import re
 
-from .. import config
-from .helper import xu_open
+import numpy
 
-try:
-    from matplotlib import pylab as plt
-except ImportError:
-    if config.VERBOSITY >= config.INFO_ALL:
-        print("rotanode_alignment: warning; plotting functionality "
-              "not available")
+from .. import config, utilities
+from .helper import xu_open
 
 LOG_comment = re.compile(r"^#C")
 LOG_peakname = re.compile(r"^#P")
@@ -61,13 +55,14 @@ class RA_Alignment(object):
 
         Parameters
         ----------
-         filename:  filename of the alignment log file
+        filename :  str
+            filename of the alignment log file
         """
 
         self.filename = filename
         try:
             self.fid = xu_open(self.filename)
-        except:
+        except OSError:
             self.fid = None
             raise IOError("error opening alignment log file %s"
                           % self.filename)
@@ -165,7 +160,8 @@ class RA_Alignment(object):
         self.data = []
         for i, k in enumerate(self.keys()):
             self.data.append(numpy.array((self.motorpos[i],
-                             self.intensities[i], self.iterations[i])))
+                                          self.intensities[i],
+                                          self.iterations[i])))
 
     def __str__(self):
         """
@@ -178,8 +174,8 @@ class RA_Alignment(object):
 
     def __del__(self):
         try:
-            fid.close()
-        except:
+            self.fid.close()
+        except AttributeError:
             pass
 
     def keys(self):
@@ -207,13 +203,11 @@ class RA_Alignment(object):
 
         Parameters
         ----------
-         pname:  peakname for which the alignment should be plotted
+        pname :     str
+            peakname for which the alignment should be plotted
         """
-
-        try:
-            plt.__version__
-        except NameError:
-            print("RA_Alignment.plot: error: plot functionality not available")
+        flag, plt = utilities.import_matplotlib_pyplot('XU.io.RA_ALignment')
+        if not flag:
             return
 
         if pname not in self.peaks:

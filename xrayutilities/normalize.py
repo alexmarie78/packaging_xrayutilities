@@ -32,10 +32,8 @@ provide functions for normalizing intensities for
 
 import numpy
 
-from . import cxrayutilities
-from . import math
+from . import config, cxrayutilities, math
 from .exception import InputError
-from . import config
 
 # python 2to3 compatibility
 try:
@@ -50,15 +48,18 @@ def blockAverage1D(data, Nav):
     all data are used. at the end of the array a smaller cell
     may be used by the averaging algorithm
 
-    Parameter
-    ---------
-     data:   data which should be contracted (length N)
-     Nav:    number of values which should be averaged
+    Parameters
+    ----------
+    data :  array-like
+        data which should be contracted (length N)
+    Nav :   int
+        number of values which should be averaged
 
     Returns
     -------
-    block averaged numpy array of data type numpy.double
-    (length ceil(N/Nav))
+    ndarray
+        block averaged numpy array of data type numpy.double
+        (length ceil(N/Nav))
     """
 
     if not isinstance(data, (numpy.ndarray, list)):
@@ -76,39 +77,37 @@ def blockAverage2D(data2d, Nav1, Nav2, **kwargs):
     perform a block average for 2D array of Scalar values
     all data are used therefore the margin cells may differ in size
 
-    Parameter
-    ---------
-     data2d:    array of 2D data shape (N,M)
-     Nav1,2:    a field of (Nav1 x Nav2) values is contracted
+    Parameters
+    ----------
+    data2d :        ndarray
+        array of 2D data shape (N, M)
+    Nav1, Nav2 :    int
+        a field of (Nav1 x Nav2) values is contracted
 
-    **kwargs:   optional keyword argument
-      roi:      region of interest for the 2D array. e.g. [20,980,40,960]
-                N = 980-20; M = 960-40
+    kwargs :        dict, optional
+        optional keyword argument
+    roi :           tuple or list, optional
+        region of interest for the 2D array. e.g. [20, 980, 40, 960],
+        reduces M, and M!
 
     Returns
     -------
-    block averaged numpy array with type numpy.double with shape
-    ( ceil(N/Nav1), ceil(M/Nav2) )
+    ndarray
+        block averaged numpy array with type numpy.double with shape
+        (ceil(N/Nav1), ceil(M/Nav2))
     """
 
     if not isinstance(data2d, (numpy.ndarray)):
         raise TypeError("first argument data2d must be of type numpy.ndarray")
 
-    # kwargs
-    if 'roi' in kwargs:
-        if kwargs['roi']:
-            roi = kwargs['roi']
-        else:
-            roi = [0, data2d.shape[0], 0, data2d.shape[1]]
-    else:
-        roi = [0, data2d.shape[0], 0, data2d.shape[1]]
-
+    roi = kwargs.get('roi', [0, data2d.shape[0], 0, data2d.shape[1]])
     data = numpy.array(data2d[roi[0]:roi[1], roi[2]:roi[3]],
                        dtype=numpy.double)
 
     if config.VERBOSITY >= config.DEBUG:
+        N, M = (roi[1] - roi[0], roi[3] - roi[2])
         print("xu.normalize.blockAverage2D: roi: %s" % (str(roi)))
-        print("xu.normalize.blockAverage2D: Nav1,2: %d,%d" % (Nav1, Nav2))
+        print("xu.normalize.blockAverage2D: Nav1, 2: %d,%d" % (Nav1, Nav2))
         print("xu.normalize.blockAverage2D: number of points: (%d,%d)"
               % (numpy.ceil(N / float(Nav1)), numpy.ceil(M / float(Nav2))))
 
@@ -124,30 +123,29 @@ def blockAveragePSD(psddata, Nav, **kwargs):
     all data are used therefore the last cell used for
     averaging may differ in size
 
-    Parameter
-    ---------
-     psddata:   array of 2D data shape (Nspectra,Nchannels)
-     Nav:       number of channels which should be averaged
+    Parameters
+    ----------
+    psddata :   ndarray
+        array of 2D data shape (Nspectra, Nchannels)
+    Nav :       int
+        number of channels which should be averaged
 
-    **kwargs:   optional keyword argument
-      roi:      region of interest for the 2D array. e.g. [20,980]
-                Nchannels = 980-20
+    kwargs :    dict, optional
+        optional keyword argument
+    roi :       tuple or list
+        region of interest for the 2D array. e.g. [20, 980] Nchannels = 980-20
 
     Returns
     -------
-    block averaged psd spectra as numpy array with type numpy.double
-    of shape ( Nspectra , ceil(Nchannels/Nav) )
+    ndarray
+        block averaged psd spectra as numpy array with type numpy.double of
+        shape (Nspectra , ceil(Nchannels/Nav))
     """
 
     if not isinstance(psddata, (numpy.ndarray)):
         raise TypeError("first argument psddata must be of type numpy.ndarray")
 
-    # kwargs
-    if 'roi' in kwargs:
-        roi = kwargs['roi']
-    else:
-        roi = [0, psddata.shape[1]]
-
+    roi = kwargs.get('roi', [0, psddata.shape[1]])
     data = numpy.array(psddata[:, roi[0]:roi[1]], dtype=numpy.double)
 
     block_av = cxrayutilities.block_average_PSD(data, Nav, config.NTHREADS)
@@ -162,38 +160,44 @@ def blockAveragePSD(psddata, Nav, **kwargs):
 class IntensityNormalizer(object):
 
     """
-    generic class for correction of intensity (point detector,or MCA,
+    generic class for correction of intensity (point detector, or MCA,
     single CCD frames) for count time and absorber factors
     the class must be supplied with a absorber correction function
     and works with data structures provided by xrayutilities.io classes or the
-    corresponding objects from hdf5 files read by pytables
+    corresponding objects from hdf5 files
     """
 
-    def __init__(self, det, **keyargs):
+    def __init__(self, det='', **keyargs):
         """
         initialization of the corrector class
 
-        Parameter
-        ---------
-         det : detector field name of the data structure
+        Parameters
+        ----------
+        det :       str
+            detector field name of the data structure
 
-        **keyargs:
-          mon : monitor field name
-          time: count time field name or count time as float
-          av_mon: average monitor value (default: data[mon].mean())
-          smoothmon: number of monitor values used to get a smooth monitor
-                     signal
-          absfun: absorber correction function to be used as in
-                  absorber_corrected_intensity = data[det]*absfun(data)
-          flatfield: flatfield of the detector; shape must be the same as
-                     data[det], and is only applied for MCA detectors
-          darkfield: darkfield of the detector; shape must be the same as
-                     data[det], and is only applied for MCA detectors
+        mon :       str, optional
+            monitor field name
+        time:       float or str, optional
+            count time field name or count time as float
+        av_mon :    float, optional
+            average monitor value (default: data[mon].mean())
+        smoothmon : int
+            number of monitor values used to get a smooth monitor signal
+        absfun :    callable, optional
+            absorber correction function to be used as in
+            ``absorber_corrected_intensity = data[det]*absfun(data)``
+        flatfield : ndarray
+            flatfield of the detector; shape must be the same as data[det], and
+            is only applied for MCA detectors
+        darkfield : ndarray
+            darkfield of the detector; shape must be the same as data[det], and
+            is only applied for MCA detectors
 
-        Example
-        -------
-        >>> detcorr = IntensityNormalizer(det="MCA", time="Seconds",
-                absfun=lambda d: d["PSDCORR"]/d["PSD"].astype(numpy.float))
+        Examples
+        --------
+        >>> detcorr = IntensityNormalizer("MCA", time="Seconds",
+        >>>     absfun=lambda d: d["PSDCORR"]/d["PSD"].astype(numpy.float))
         """
 
         for k in keyargs.keys():
@@ -206,40 +210,13 @@ class IntensityNormalizer(object):
         # check input arguments
         self._setdet(det)
 
-        if 'mon' in keyargs:
-            self._setmon(keyargs['mon'])
-        else:
-            self._mon = None
-
-        if 'time' in keyargs:
-            self._settime(keyargs['time'])
-        else:
-            self._time = None
-
-        if 'av_mon' in keyargs:
-            self._setavmon(keyargs['av_mon'])
-        else:
-            self._avmon = None
-
-        if 'absfun' in keyargs:
-            self._setabsfun(keyargs['absfun'])
-        else:
-            self._absfun = None
-
-        if 'flatfield' in keyargs:
-            self._setflatfield(keyargs['flatfield'])
-        else:
-            self._flatfield = None
-
-        if 'darkfield' in keyargs:
-            self._setdarkfield(keyargs['darkfield'])
-        else:
-            self._darkfield = None
-
-        if 'smoothmon' in keyargs:
-            self.smoothmon = keyargs['smoothmon']
-        else:
-            self.smoothmon = 1
+        self._setmon(keyargs.get('mon', None))
+        self._settime(keyargs.get('time', None))
+        self._setavmon(keyargs.get('av_mon', None))
+        self._setabsfun(keyargs.get('absfun', None))
+        self._setflatfield(keyargs.get('flatfield', None))
+        self._setdarkfield(keyargs.get('darkfield', None))
+        self.smoothmon = keyargs.get('smoothmon', 1)
 
     def _getdet(self):
         """
@@ -410,20 +387,30 @@ class IntensityNormalizer(object):
     flatfield = property(_getflatfield, _setflatfield)
     darkfield = property(_getdarkfield, _setdarkfield)
 
-    def __call__(self, data):
+    def __call__(self, data, ccd=None):
         """
         apply the correction method which was initialized to the measured data
 
-        Parameter
-        ---------
-         data: data object from xrayutilities.io classes (numpy.recarray)
+        Parameters
+        ----------
+        data :  numpy.recarray
+            data object from xrayutilities.io classes
+        ccd :   ndarray, optional
+            optionally CCD data can be given as separate ndarray of shape
+            (len(data), n1, n2), where n1, n2 is the shape of the CCD image.
 
         Returns
         -------
-         corrint: corrected intensity as numpy.ndarray of the same shape as
-                  data[det]
+        corrint :   ndarray
+            corrected intensity as numpy.ndarray of the same shape as data[det]
+            (or ccd.shape)
         """
-        corrint = numpy.zeros(data[self._det].shape, dtype=numpy.float)
+        if numpy.any(ccd):
+            rawdata = ccd
+        else:
+            rawdata = data[self._det]
+
+        corrint = numpy.zeros(rawdata.shape, dtype=numpy.float)
 
         # set needed variables
         # monitor intensity
@@ -463,23 +450,23 @@ class IntensityNormalizer(object):
             if numpy.isnan(c) or numpy.isinf(c) or c == 0:
                 c = 1.0
 
-        if len(data[self._det].shape) == 1:
-            corrint = data[self._det] * c
-        elif len(data[self._det].shape) == 2 and isinstance(c, numpy.ndarray):
-            # 1D detector c.shape[0] should be data[self._det].shape[0]
+        if len(rawdata.shape) == 1:
+            corrint = rawdata * c
+        elif len(rawdata.shape) == 2 and isinstance(c, numpy.ndarray):
+            # 1D detector c.shape[0] should be rawdata.shape[0]
             if self._darkfield is not None:
-                if self._darkfield.shape[0] != data[self._det].shape[1]:
+                if self._darkfield.shape[0] != rawdata.shape[1]:
                     raise InputError("data[det] second dimension must have "
                                      "the same length as darkfield")
 
                 if isinstance(time, numpy.ndarray):
                     # darkfield correction
-                    corrint = (data[self._det] -
+                    corrint = (rawdata -
                                self._darkfield[numpy.newaxis, :] *
                                time[:, numpy.newaxis])
                 elif isinstance(time, float):
                     # darkfield correction
-                    corrint = (data[self._det] -
+                    corrint = (rawdata -
                                self._darkfield[numpy.newaxis, :] * time)
                 else:
                     print("XU.normalize.IntensityNormalizer: check "
@@ -488,24 +475,28 @@ class IntensityNormalizer(object):
                 corrint[corrint < 0.] = 0.
 
             else:
-                corrint = data[self._det]
+                corrint = rawdata
 
             corrint = corrint * c[:, numpy.newaxis]
 
             if self._flatfield is not None:
-                if self._flatfield.shape[0] != data[self._det].shape[1]:
+                if self._flatfield.shape[0] != rawdata.shape[1]:
                     raise InputError("data[det] second dimension must have "
                                      "the same length as flatfield")
                 # flatfield correction
                 corrint = (corrint / self._flatfield[numpy.newaxis, :] *
                            self._flatfieldav)
 
-        elif len(data[self._det].shape) == 2 and isinstance(c, numpy.float):
+        elif len(rawdata.shape) == 2 and isinstance(c, numpy.float):
             # single 2D detector frame
-            corrint = data[self._det] * c
+            corrint = rawdata * c
+
+        elif len(rawdata.shape) == 3:
+            # darkfield and flatfield correction is still missing!
+            corrint = rawdata * c[:, numpy.newaxis, numpy.newaxis]
 
         else:
             raise InputError("data[det] must be an array of dimension one "
-                             "or two")
+                             "or two or three")
 
         return corrint

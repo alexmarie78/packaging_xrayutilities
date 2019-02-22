@@ -17,23 +17,24 @@
 
 
 """
-class for reading data+header information from tty08 data files
+class for reading data + header information from tty08 data files
 
-tty08 is system used at beamline P08 at Hasylab Hamburg and creates simple
+tty08 is a system used at beamline P08 at Hasylab Hamburg and creates simple
 ASCII files to save the data. Information is easily read from the multicolumn
-data file.  the functions below enable also to parse the information of the
+data file. the functions below enable also to parse the information of the
 header
 """
 
+import glob
+import os.path
 import re
-import numpy
-import os
-import matplotlib
 
+import numpy
+import numpy.lib.recfunctions
+
+from ..exception import InputError
 # relative imports from xrayutilities
 from .helper import xu_open
-from .. import config
-from ..exception import InputError
 
 re_columns = re.compile(r"/\*H")
 re_command = re.compile(r"^/\*C command")
@@ -50,14 +51,12 @@ class tty08File(object):
     Constructor call. This class should work for data stored at
     beamline P08 using the tty08 acquisition system.
 
-    Required constructor arguments:
-    ------------------------------
-     filename:  a string with the name of the tty08-file
-
-    Optional keyword arguments:
-    --------------------------
-     mcadir .................. directory name of MCA files
-
+    Parameters
+    ----------
+    filename :  str
+        tty08-filename
+    mcadir :    str, optional
+        directory name of MCA files
     """
 
     def __init__(self, filename, path=None, mcadir=None):
@@ -74,34 +73,28 @@ class tty08File(object):
             self.mca_files = sorted(glob.glob(
                 os.path.join(self.mca_directory, '*')))
 
-            if len(self.mca_files):
+            if self.mca_files:
                 self.ReadMCA()
 
     def ReadMCA(self):
+        self.mca = numpy.empty((len(self.mca_files),
+                                numpy.loadtxt(self.mca_files[0]).shape[0]),
+                               dtype=numpy.float)
+        for i in range(len(self.mca_files)):
+            mcadata = numpy.loadtxt(self.mca_files[i])
 
-        mca = numpy.empty((len(raws), numpy.loadtxt(raws[0]).shape[0]),
-                          dtype=numpy.float)
-        for i in range(len(raws)):
-            mca[i, :] = numpy.loadtxt(self.mca_files[i])[:, 1]
+            self.mca[i, :] = mcadata[:, 1]
 
-            fname = self.mca_file_template % i
-            data = numpy.loadtxt(fname)
-
-            if i == self.mca_start_index:
-                if len(data.shape) == 2:
-                    self.mca_channels = data[:, 0]
+            if i == 0:
+                if len(mcadata.shape) == 2:
+                    self.mca_channels = mcadata[:, 0]
                 else:
-                    self.mca_channels = numpy.arange(0, data.shape[0])
+                    self.mca_channels = numpy.arange(0, mcadata.shape[0])
 
-            if len(data.shape) == 2:
-                dlist.append(data[:, 1].tolist())
-            else:
-                dlist.append(data.tolist())
-
-        self.mca = mca
-        self.data = matplotlib.mlab.rec_append_fields(
-            self.data, 'MCA', self.mca,
-            dtypes=[(numpy.double, self.mca.shape[1])])
+        mcatemp = self.mca.view([('MCA',
+                                  (self.mca.dtype, self.mca.shape[1]))])
+        self.data = numpy.lib.recfunctions.merge_arrays([self.data, mcatemp],
+                                                        flatten=True)
 
     def Read(self):
         """
@@ -111,11 +104,8 @@ class tty08File(object):
         with xu_open(self.full_filename) as fid:
             # read header
             self.init_mopo = {}
-            while True:
-                line = fid.readline().decode('ascii')
-                # if DEGUG: print line
-                if not line:
-                    break
+            for line in fid:
+                line = line.decode('ascii')
 
                 if re_command.match(line):
                     m = line.split(':')
@@ -143,7 +133,7 @@ class tty08File(object):
         self.data = numpy.rec.fromrecords(self.data, names=self.columns)
 
 
-def gettty08_scan(scanname, scannumbers, *args):
+def gettty08_scan(scanname, scannumbers, *args, **keyargs):
     """
     function to obtain the angular cooridinates as well as intensity values
     saved in TTY08 datafiles. Especially usefull for reciprocal space map
@@ -154,31 +144,35 @@ def gettty08_scan(scanname, scannumbers, *args):
 
     Parameters
     ----------
-     scanname:  name of the scans, for multiple scans this needs to be a
-                template string
-     scannumbers:  number of the scans of the reciprocal space map (int,tuple
-                   or list)
+    scanname :      str
+        name of the scans, for multiple scans this needs to be a template
+        string
+    scannumbers :   int, tuple or list
+        number of the scans of the reciprocal space map
 
-     *args:   names of the motors (optional) (strings)
-     to read reciprocal space maps measured in coplanar diffraction give:
-     omname:  e.g. name of the omega motor (or its equivalent)
-     ttname:  e.g. name of the two theta motor (or its equivalent)
+    args :          str, optional
+        names of the motors. to read reciprocal space maps measured in coplanar
+        diffraction give:
+
+            - `omname`: the name of the omega motor (or its equivalent)
+            - `ttname`: the name of the two theta motor (or its equivalent)
+
+    keyargs :       dict, optional
+        keyword arguments are passed on to tty08File
 
     Returns
     -------
-     MAP
+    [ang1, ang2, ...] :     list, optional
+        angular positions of the center channel of the position sensitive
+        detector (numpy.ndarray 1D), omitted if no `args` are given
+    MAP :                   ndarray
+        All the data values as stored in the data file (includes the
+        intensities e.g. MAP['MCA']).
 
-     or
-
-     [ang1,ang2,...],MAP:
-                angular positions of the center channel of the position
-                sensitive detector (numpy.ndarray 1D) together with all the
-                data values as stored in the data file (includes the
-                intensities e.g. MAP['MCA']).
-
-    Example
-    -------
-    >>> [om,tt],MAP = xu.io.gettty08_scan('text%05d.dat',36,'omega','gamma')
+    Examples
+    --------
+    >>> [om, tt], MAP = xu.io.gettty08_scan('text%05d.dat', 36, 'omega',
+    >>>                                     'gamma')
     """
 
     if isinstance(scannumbers, (list, tuple)):
@@ -195,7 +189,7 @@ def gettty08_scan(scanname, scannumbers, *args):
     MAP = numpy.zeros(0)
 
     for nr in scanlist:
-        scan = tty08File(scanname % nr)
+        scan = tty08File(scanname % nr, **keyargs)
         sdata = scan.data
         if MAP.dtype == numpy.float64:
             MAP.dtype = sdata.dtype
@@ -207,7 +201,7 @@ def gettty08_scan(scanname, scannumbers, *args):
             scanlength = len(sdata)
             try:
                 buf = sdata[motname]
-            except:
+            except ValueError:
                 buf = scan.init_mopo[motname] * numpy.ones(scanlength)
             angles[motname] = numpy.concatenate((angles[motname], buf))
 
@@ -216,7 +210,9 @@ def gettty08_scan(scanname, scannumbers, *args):
         # create return values in correct order
         retval.append(angles[motname])
 
-    if len(args) == 0:
+    if not args:
         return MAP
+    elif len(args) == 1:
+        return retval[0], MAP
     else:
         return retval, MAP

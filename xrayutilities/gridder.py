@@ -16,13 +16,14 @@
 # Copyright (C) 2009-2010, 2013
 #               Eugen Wintersberger <eugen.wintersberger@desy.de>
 # Copyright (C) 2009 Mario Keplinger <mario.keplinger@jku.at>
-# Copyright (C) 2009-2014 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2017 Dominik Kriegner <dominik.kriegner@gmail.com>
+
+import abc
 
 import numpy
 
-from . import cxrayutilities
-from . import exception
-from . import config
+from . import config, cxrayutilities, utilities
+from .exception import InputError
 
 
 def delta(min_value, max_value, n):
@@ -31,9 +32,9 @@ def delta(min_value, max_value, n):
 
     Parameters
     ----------
-    min_value ........... axis minimum value
-    max_value ........... axis maximum value
-    n ................... number of steps
+   min_value :	 axis minimum value
+   max_value :	 axis maximum value
+   n :	 number of steps
     """
     if n != 1:
         return (float(max_value) - float(min_value)) / float(n - 1)
@@ -47,9 +48,12 @@ def axis(min_value, max_value, n):
 
     Parameters
     ----------
-    min_value ........... axis minimum value
-    max_value ........... axis maximum value
-    n ................... number of steps
+    min_value : float
+        axis minimum value
+    max_value :	float
+        axis maximum value
+    n :	        int
+        number of steps
     """
 
     if n != 1:
@@ -69,8 +73,7 @@ def ones(*args):
     return numpy.ones(args, dtype=numpy.double)
 
 
-class Gridder(object):
-
+class Gridder(utilities.ABC):
     """
     Basis class for gridders in xrayutilities. A gridder is a function mapping
     irregular spaced data onto a regular grid by binning the data into equally
@@ -104,10 +107,23 @@ class Gridder(object):
         self.fixed_range = False
 
         # no data initialization necessary in c-code
-        self.flags = self.flags | 1
+        self.flags = utilities.set_bit(self.flags, 0)
+
+        if not hasattr(self, '_gdata'):
+            self._gdata = numpy.empty(0)
+        if not hasattr(self, '_gnorm'):
+            self._gnorm = numpy.empty(0)
 
         if config.VERBOSITY >= config.INFO_ALL:
-            self.flags = self.flags | 16  # set verbosity flag
+            self.flags = utilities.set_bit(self.flags, 3)
+
+    @abc.abstractmethod
+    def __call__(self):
+        """
+        abstract call method which every implementation of a Gridder has to
+        override
+        """
+        pass
 
     def Normalize(self, bool):
         """
@@ -120,9 +136,9 @@ class Gridder(object):
                             "(True/False)!")
         self.normalize = bool
         if bool:
-            self.flags = self.flags & (255 - 4)
+            self.flags = utilities.clear_bit(self.flags, 2)
         else:
-            self.flags = self.flags ^ 4
+            self.flags = utilities.set_bit(self.flags, 2)
 
     def KeepData(self, bool):
         if bool not in [False, True]:
@@ -145,15 +161,20 @@ class Gridder(object):
 
     data = property(__get_data)
 
+    def _prepare_array(self, a):
+        """
+        prepare array for passing to c-code
+        """
+        if isinstance(a, (list, tuple, numpy.float, numpy.int)):
+            a = numpy.asarray(a)
+        return a.reshape(a.size)
+
     def Clear(self):
         """
         Clear so far gridded data to reuse this instance of the Gridder
         """
-        try:
-            self._gdata[...] = 0
-            self._gnorm[...] = 0
-        except:
-            pass
+        self._gdata[...] = 0
+        self._gnorm[...] = 0
 
 
 class Gridder1D(Gridder):
@@ -168,6 +189,21 @@ class Gridder1D(Gridder):
         self.xmax = 0
         self._gdata = numpy.zeros(nx, dtype=numpy.double)
         self._gnorm = numpy.zeros(nx, dtype=numpy.double)
+
+    def savetxt(self, filename, header=''):
+        """
+        save gridded data to a txt file with two columns. The first column is
+        the data coordinate and the second the corresponding data value
+
+        Parameters
+        ----------
+        filename :  str
+            output filename
+        header :    str, optional
+            optional header for the data file.
+        """
+        numpy.savetxt(filename, numpy.vstack((self.xaxis, self.data)).T,
+                      header=header, fmt='%.6g %.4g')
 
     def __get_xaxis(self):
         """
@@ -188,52 +224,56 @@ class Gridder1D(Gridder):
 
         Parameters
         ----------
-         min:   minimum value of the gridding range
-         max:   maximum value of the gridding range
-         fixed: flag to turn fixed range gridding on (True (default))
-                or off (False)
+        min :   float
+            minimum value of the gridding range
+        max :   float
+            maximum value of the gridding range
+        fixed : bool, optional
+            flag to turn fixed range gridding on (True (default)) or off
+            (False)
         """
         self.fixed_range = fixed
         self.xmin = min
         self.xmax = max
 
-    def __call__(self, *args):
+    def _checktransinput(self, x, data):
         """
-        Perform gridding on a set of data. After running the gridder
-        the 'data' object in the class is holding the gridded data.
-
-        Parameters
-        ----------
-         x ............... numpy array of arbitrary shape with x positions
-         data ............ numpy array of arbitrary shape with data values
+        common checks and reshape commands for the input data. This function
+        checks the data type and shape of the input data.
         """
-
         if not self.keep_data:
             self.Clear()
 
-        x = args[0]
-        data = args[1]
-
-        if isinstance(x, (list, tuple, numpy.float, numpy.int)):
-            x = numpy.array(x)
-        if isinstance(data, (list, tuple, numpy.float, numpy.int)):
-            data = numpy.array(data)
-
-        x = x.reshape(x.size)
-        data = data.reshape(data.size)
+        x = self._prepare_array(x)
+        data = self._prepare_array(data)
 
         if x.size != data.size:
-            raise exception.InputError("XU.Gridder1D: size of given datasets "
-                                       "(x,data) is not equal!")
+            raise InputError("XU.%s: size of given datasets (x, data)"
+                             " is not equal!" % self.__class__.__name__)
 
         if not self.fixed_range:
             # assume that with setting keep_data the user wants to call the
             # gridder more often and obtain a reasonable result
             self.dataRange(x.min(), x.max(), self.keep_data)
 
+        return x, data
+
+    def __call__(self, x, data):
+        """
+        Perform gridding on a set of data. After running the gridder
+        the 'data' object in the class is holding the gridded data.
+
+        Parameters
+        ----------
+        x :	 ndarray
+            numpy array of arbitrary shape with x positions
+        data :	 ndarray
+            numpy array of arbitrary shape with data values
+        """
+        x, data = self._checktransinput(x, data)
         # remove normalize flag for C-code, normalization is always performed
         # in python
-        flags = self.flags ^ 4
+        flags = utilities.set_bit(self.flags, 2)
         cxrayutilities.gridder1d(x, data, self.nx, self.xmin, self.xmax,
                                  self._gdata, self._gnorm, flags)
 
@@ -254,38 +294,22 @@ class FuzzyGridder1D(Gridder1D):
 
         Parameters
         ----------
-         x ............... numpy array of arbitrary shape with x positions
-         data ............ numpy array of arbitrary shape with data values
-         width ........... width of one data point. If not given half the bin
-                           size will be used.
+        x :	 ndarray
+            numpy array of arbitrary shape with x positions
+        data :	 ndarray
+            numpy array of arbitrary shape with data values
+        width :	 float, optional
+            width of one data point. If not given half the bin size will be
+            used.
         """
-
-        if not self.keep_data:
-            self.Clear()
-
-        if isinstance(x, (list, tuple, numpy.float, numpy.int)):
-            x = numpy.array(x)
-        if isinstance(data, (list, tuple, numpy.float, numpy.int)):
-            data = numpy.array(data)
-
-        x = x.reshape(x.size)
-        data = data.reshape(data.size)
-
-        if x.size != data.size:
-            raise exception.InputError("XU.Gridder1D: size of given datasets "
-                                       "(x,data) is not equal!")
-
-        if not self.fixed_range:
-            # assume that with setting keep_data the user wants to call the
-            # gridder more often and obtain a reasonable result
-            self.dataRange(x.min(), x.max(), self.keep_data)
+        x, data = self._checktransinput(x, data)
 
         if not width:
             width = delta(self.xmin, self.xmax, self.nx) / 2.
 
         # remove normalize flag for C-code, normalization is always performed
         # in python
-        flags = self.flags ^ 4
+        flags = utilities.set_bit(self.flags, 2)
         cxrayutilities.fuzzygridder1d(x, data, self.nx, self.xmin, self.xmax,
                                       self._gdata, self._gnorm, width, flags)
 
@@ -305,25 +329,20 @@ class npyGridder1D(Gridder1D):
 
     xaxis = property(__get_xaxis)
 
-    def __call__(self, *args):
+    def __call__(self, x, data):
         """
         Perform gridding on a set of data. After running the gridder
         the 'data' object in the class is holding the gridded data.
 
         Parameters
         ----------
-         x ............... numpy array of arbitrary shape with x positions
-         data ............ numpy array of arbitrary shape with data values
+        x :	 ndarray
+            numpy array of arbitrary shape with x positions
+        data :	 ndarray
+            numpy array of arbitrary shape with data values
         """
 
-        x = args[0]
-        data = args[1]
-        x = x.reshape(x.size)
-        data = data.reshape(data.size)
-
-        if x.size != data.size:
-            raise exception.InputError("XU.Gridder1D: size of given datasets "
-                                       "(x,data) is not equal!")
+        x, data = self._checktransinput(x, data)
 
         # use only non-NaN data values
         mask = numpy.invert(numpy.isnan(data))

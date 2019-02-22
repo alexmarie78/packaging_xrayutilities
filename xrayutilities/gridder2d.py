@@ -13,21 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2009-2010,2013
+# Copyright (C) 2009-2010, 2013
 #               Eugen Wintersberger <eugen.wintersberger@desy.de>
 # Copyright (C) 2009 Mario Keplinger <mario.keplinger@jku.at>
-# Copyright (C) 2009-2013 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2016 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 import numpy
 
-from . import cxrayutilities
-from . import exception
-from . import config
-
-from .gridder import Gridder
-from .gridder import delta
-from .gridder import axis
-from .gridder import ones
+from . import cxrayutilities, exception, utilities
+from .gridder import Gridder, axis, delta, ones
 
 
 class Gridder2D(Gridder):
@@ -52,12 +46,30 @@ class Gridder2D(Gridder):
 
     def _allocate_memory(self):
         """
-        Class method to allocate memory for the gridder based on the nx,ny
+        Class method to allocate memory for the gridder based on the nx, ny
         class attributes.
         """
 
         self._gdata = numpy.zeros((self.nx, self.ny), dtype=numpy.double)
         self._gnorm = numpy.zeros((self.nx, self.ny), dtype=numpy.double)
+
+    def savetxt(self, filename, header=''):
+        """
+        save gridded data to a txt file with two columns. The first two columns
+        are the data coordinates and the last one the corresponding data
+        value.
+
+        Parameters
+        ----------
+        filename :  str
+            output filename
+        header :    str, optional
+            optional header for the data file.
+        """
+        numpy.savetxt(filename, numpy.vstack((self.xmatrix.flat,
+                                              self.ymatrix.flat,
+                                              self.data.flat)).T,
+                      header=header, fmt='%.6g %.6g %.4g')
 
     def SetResolution(self, nx, ny):
         """
@@ -66,8 +78,10 @@ class Gridder2D(Gridder):
 
         Parameters
         ----------
-        nx ............ number of points in x-direction
-        ny ............ number of points in y-direction
+        nx :	 int
+            number of points in x-direction
+        ny :	 int
+            number of points in y-direction
         """
         self.nx = nx
         self.ny = ny
@@ -100,10 +114,13 @@ class Gridder2D(Gridder):
 
         Parameters
         ----------
-         xmin,ymin:   minimum value of the gridding range in x,y
-         xmax,ymax:   maximum value of the gridding range in x,y
-         fixed: flag to turn fixed range gridding on (True (default))
-                or off (False)
+        xmin, ymin :    float
+            minimum value of the gridding range in x, y
+        xmax, ymax :    float
+            maximum value of the gridding range in x, y
+        fixed :         bool, optional
+            flag to turn fixed range gridding on (True (default)) or off
+            (False)
         """
         self.fixed_range = fixed
         self.xmin = xmin
@@ -111,52 +128,110 @@ class Gridder2D(Gridder):
         self.ymin = ymin
         self.ymax = ymax
 
-    def __call__(self, *args):
+    def _checktransinput(self, x, y, data):
         """
-        Perform gridding on a set of data. After running the gridder
-        the 'data' object in the class is holding the gridded data.
-
-        Parameters
-        ----------
-        x ............... numpy array of arbitrary shape with x positions
-        y ............... numpy array of arbitrary shape with y positions
-        data ............ numpy array of arbitrary shape with data values
+        common checks and reshape commands for the input data. This function
+        checks the data type and shape of the input data.
         """
-
         if not self.keep_data:
             self.Clear()
 
-        x = args[0]
-        y = args[1]
-        data = args[2]
-
-        if isinstance(x, (list, tuple, numpy.float, numpy.int)):
-            x = numpy.array(x)
-        if isinstance(y, (list, tuple, numpy.float, numpy.int)):
-            y = numpy.array(y)
-        if isinstance(data, (list, tuple, numpy.float, numpy.int)):
-            data = numpy.array(data)
-
-        x = x.reshape(x.size)
-        y = y.reshape(y.size)
-        data = data.reshape(data.size)
+        x = self._prepare_array(x)
+        y = self._prepare_array(y)
+        data = self._prepare_array(data)
 
         if x.size != y.size or y.size != data.size:
-            raise exception.InputError("XU.Gridder2D: size of given datasets "
-                                       "(x,y,data) is not equal!")
+            raise exception.InputError("XU.%s: size of given datasets "
+                                       "(x, y, data) is not equal!"
+                                       % self.__class__.__name__)
 
         if not self.fixed_range:
             # assume that with setting keep_data the user wants to call the
             # gridder more often and obtain a reasonable result
             self.dataRange(x.min(), x.max(), y.min(), y.max(), self.keep_data)
 
-        # remove normalize flag for C-code, normalization is always performed
-        # in python
-        flags = self.flags ^ 4
+        return x, y, data
+
+    def __call__(self, x, y, data):
+        """
+        Perform gridding on a set of data. After running the gridder
+        the 'data' object in the class is holding the gridded data.
+
+        Parameters
+        ----------
+        x :     ndarray
+            numpy array of arbitrary shape with x positions
+        y :	ndarray
+            numpy array of arbitrary shape with y positions
+        data :	ndarray
+            numpy array of arbitrary shape with data values
+        """
+        x, y, data = self._checktransinput(x, y, data)
+        # remove normalize flag for C-code
+        flags = utilities.set_bit(self.flags, 2)
         cxrayutilities.gridder2d(x, y, data, self.nx, self.ny,
                                  self.xmin, self.xmax,
                                  self.ymin, self.ymax,
                                  self._gdata, self._gnorm, flags)
+
+
+class FuzzyGridder2D(Gridder2D):
+    """
+    An 2D binning class considering every data point to have a finite area.
+    If necessary one data point will be split fractionally over different
+    data bins. This is numerically more effort but represents better the
+    typical case of a experimental data, which do not represent a mathematical
+    point but have a finite size (e.g. X-ray data from a 2D detector or
+    reciprocal space maps measured with point/linear detector).
+
+    Currently only a rectangular area can be considered during the gridding.
+    """
+
+    def __call__(self, x, y, data, **kwargs):
+        """
+        Perform gridding on a set of data. After running the gridder
+        the 'data' object in the class is holding the gridded data.
+
+        Parameters
+        ----------
+        x :	ndarray
+            numpy array of arbitrary shape with x positions
+        y :	ndarray
+            numpy array of arbitrary shape with y positions
+        data :	ndarray
+            numpy array of arbitrary shape with data values
+        width :	 float or tuple or list, optional
+            width of one data point. If not given half the bin size will be
+            used. The width can be given as scalar if it is equal for both data
+            dimensions, or as sequence of length 2.
+        """
+
+        for k in kwargs.keys():
+            if k not in ['width']:
+                raise Exception("unknown keyword argument given: allowed is"
+                                "'width': specifiying fuzzy data size")
+
+        x, y, data = self._checktransinput(x, y, data)
+
+        if 'width' in kwargs:
+            try:
+                length = len(kwargs['width'])
+            except TypeError:
+                length = 1
+            if length == 2:
+                wx, wy = kwargs['width']
+            else:
+                wx = kwargs['width']
+                wy = wx
+        else:
+            wx = delta(self.xmin, self.xmax, self.nx) / 2.
+            wy = delta(self.ymin, self.ymax, self.ny) / 2.
+        # remove normalize flag for C-code
+        flags = utilities.set_bit(self.flags, 2)
+        cxrayutilities.fuzzygridder2d(x, y, data, self.nx, self.ny,
+                                      self.xmin, self.xmax,
+                                      self.ymin, self.ymax,
+                                      self._gdata, self._gnorm, wx, wy, flags)
 
 
 class Gridder2DList(Gridder2D):
@@ -167,22 +242,9 @@ class Gridder2DList(Gridder2D):
     bin for further treatment by the user
     """
 
-    def __init__(self, nx, ny):
-        Gridder.__init__(self)
-
-        self.xmin = None
-        self.ymin = None
-        self.xmax = None
-        self.ymax = None
-
-        self.nx = nx
-        self.ny = ny
-
-        self._allocate_memory()
-
     def _allocate_memory(self):
         """
-        Class method to allocate memory for the gridder based on the nx,ny
+        Class method to allocate memory for the gridder based on the nx, ny
         class attributes.
         """
 
@@ -204,7 +266,7 @@ class Gridder2DList(Gridder2D):
 
     data = property(__get_data)
 
-    def __call__(self, *args):
+    def __call__(self, x, y, data):
         """
         Perform gridding on a set of data. After running the gridder the 'data'
         object in the class is holding the lists of data-objects belonging to
@@ -212,42 +274,19 @@ class Gridder2DList(Gridder2D):
 
         Parameters
         ----------
-        x ............... numpy array of arbitrary shape with x positions
-        y ............... numpy array of arbitrary shape with y positions
-        data ............ array,list,tuple with data of same length as x,y but
-                          of arbitrary type
+        x :     ndarray
+            numpy array of arbitrary shape with x positions
+        y :     ndarray
+            numpy array of arbitrary shape with y positions
+        data :  ndarray, list or tuple
+            data of same length as x, y but of arbitrary type
         """
 
-        if not self.keep_data:
-            self.Clear()
-
-        x = args[0]
-        y = args[1]
-        data = args[2]
-
-        if isinstance(x, (list, tuple, numpy.float, numpy.int)):
-            x = numpy.array(x)
-        if isinstance(y, (list, tuple, numpy.float, numpy.int)):
-            y = numpy.array(y)
-        if isinstance(data, (list, tuple, numpy.float, numpy.int)):
-            data = list(data)
-
-        x = x.reshape(x.size)
-        y = y.reshape(y.size)
-
-        if x.size != y.size or y.size != len(data):
-            raise exception.InputError("XU.Gridder2DList: size of given "
-                                       "datasets (x,y,data) is not equal!")
-
-        if not self.fixed_range:
-            # assume that with setting keep_data the user wants to call the
-            # gridder more often and obtain a reasonable result
-            self.dataRange((x.min(), x.max()), (y.min(), y.max()),
-                           self.keep_data)
+        x, y, data = self._checktransinput(x, y, data)
 
         # perform gridding this should be moved to native code if possible
         def gindex(x, min, delt):
-            return numpy.round((x - min) / delt)
+            return numpy.round((x - min) / delt).astype(numpy.int)
 
         xdelta = delta(self.xmin, self.xmax, self.nx)
         ydelta = delta(self.ymin, self.ymax, self.ny)

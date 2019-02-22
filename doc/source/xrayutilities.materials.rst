@@ -4,6 +4,14 @@ xrayutilities.materials package
 Submodules
 ----------
 
+xrayutilities.materials.atom module
+-----------------------------------
+
+.. automodule:: xrayutilities.materials.atom
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 xrayutilities.materials.cif module
 ----------------------------------
 
@@ -28,10 +36,10 @@ xrayutilities.materials.elements module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.materials.lattice module
---------------------------------------
+xrayutilities.materials.heuslerlib module
+-----------------------------------------
 
-.. automodule:: xrayutilities.materials.lattice
+.. automodule:: xrayutilities.materials.heuslerlib
     :members:
     :undoc-members:
     :show-inheritance:
@@ -44,10 +52,34 @@ xrayutilities.materials.material module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.materials.predefined_materials module
----------------------------------------------------
+xrayutilities.materials.plot module
+-----------------------------------
+
+.. automodule:: xrayutilities.materials.plot
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+xrayutilities.materials.predefined\_materials module
+----------------------------------------------------
 
 .. automodule:: xrayutilities.materials.predefined_materials
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+xrayutilities.materials.spacegrouplattice module
+------------------------------------------------
+
+.. automodule:: xrayutilities.materials.spacegrouplattice
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+xrayutilities.materials.wyckpos module
+--------------------------------------
+
+.. automodule:: xrayutilities.materials.wyckpos
     :members:
     :undoc-members:
     :show-inheritance:

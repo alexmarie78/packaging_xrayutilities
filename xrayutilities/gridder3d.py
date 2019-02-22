@@ -13,20 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2009-2010,2013
+# Copyright (C) 2009-2010, 2013
 #               Eugen Wintersberger <eugen.wintersberger@desy.de>
 # Copyright (C) 2009 Mario Keplinger <mario.keplinger@jku.at>
-# Copyright (C) 2009-2013 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2016 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 import numpy
 
-from . import cxrayutilities
-from . import exception
-from . import config
-
-from .gridder import Gridder
-from .gridder import delta
-from .gridder import axis
+from . import cxrayutilities, exception, utilities
+from .gridder import Gridder, axis, delta, ones
 
 
 class Gridder3D(Gridder):
@@ -36,7 +31,7 @@ class Gridder3D(Gridder):
 
         # check input
         if nx <= 0 or ny <= 0 or nz <= 0:
-            raise exception.InputError('None of nx,ny and nz can be smaller '
+            raise exception.InputError('None of nx, ny and nz can be smaller '
                                        'than 1!')
 
         self.xmin = 0
@@ -54,7 +49,7 @@ class Gridder3D(Gridder):
 
     def _allocate_memory(self):
         """
-        Class method to allocate memory for the gridder based on the nx,ny
+        Class method to allocate memory for the gridder based on the nx, ny
         class attributes.
         """
         self._gdata = numpy.zeros((self.nx, self.ny, self.nz),
@@ -106,10 +101,13 @@ class Gridder3D(Gridder):
 
         Parameters
         ----------
-         xmin,ymin,zmin:   minimum value of the gridding range in x,y,z
-         xmax,ymax,zmax:   maximum value of the gridding range in x,y,z
-         fixed: flag to turn fixed range gridding on (True (default))
-                or off (False)
+        xmin, ymin, zmin :  float
+            minimum value of the gridding range in x, y, z
+        xmax, ymax, zmax :  float
+            maximum value of the gridding range in x, y, z
+        fixed :             bool, optional
+            flag to turn fixed range gridding on (True (default)) or off
+            (False)
         """
         self.fixed_range = fixed
         self.xmin = xmin
@@ -119,39 +117,23 @@ class Gridder3D(Gridder):
         self.zmin = zmin
         self.zmax = zmax
 
-    def __call__(self, x, y, z, data):
+    def _checktransinput(self, x, y, z, data):
         """
-        Perform gridding on a set of data. After running the gridder
-        the 'data' object in the class is holding the gridded data.
-
-        Parameters
-        ----------
-        x ............... numpy array of arbitrary shape with x positions
-        y ............... numpy array of arbitrary shape with y positions
-        z ............... numpy array fo arbitrary shape with z positions
-        data ............ numpy array of arbitrary shape with data values
+        common checks and reshape commands for the input data. This function
+        checks the data type and shape of the input data.
         """
-
         if not self.keep_data:
             self.Clear()
 
-        if isinstance(x, (list, tuple, numpy.float, numpy.int)):
-            x = numpy.array(x)
-        if isinstance(y, (list, tuple, numpy.float, numpy.int)):
-            y = numpy.array(y)
-        if isinstance(z, (list, tuple, numpy.float, numpy.int)):
-            z = numpy.array(z)
-        if isinstance(data, (list, tuple, numpy.float, numpy.int)):
-            data = numpy.array(data)
-
-        x = x.reshape(x.size)
-        y = y.reshape(y.size)
-        z = z.reshape(z.size)
-        data = data.reshape(data.size)
+        x = self._prepare_array(x)
+        y = self._prepare_array(y)
+        z = self._prepare_array(z)
+        data = self._prepare_array(data)
 
         if x.size != y.size or y.size != z.size or z.size != data.size:
-            raise exception.InputError("XU.Gridder3D: size of given datasets "
-                                       "(x,y,z,data) is not equal!")
+            raise exception.InputError("XU.%s: size of given datasets "
+                                       "(x, y, z, data) is not equal!"
+                                       % self.__class__.__name__)
 
         if not self.fixed_range:
             # assume that with setting keep_data the user wants to call the
@@ -161,11 +143,96 @@ class Gridder3D(Gridder):
                            z.min(), z.max(),
                            self.keep_data)
 
-        # remove normalize flag for C-code, normalization is always performed
-        # in python
-        flags = self.flags ^ 4
+        return x, y, z, data
+
+    def __call__(self, x, y, z, data):
+        """
+        Perform gridding on a set of data. After running the gridder
+        the 'data' object in the class is holding the gridded data.
+
+        Parameters
+        ----------
+        x :     ndarray
+            numpy array of arbitrary shape with x positions
+        y :	ndarray
+            numpy array of arbitrary shape with y positions
+        z :	ndarray
+            numpy array fo arbitrary shape with z positions
+        data :	ndarray
+            numpy array of arbitrary shape with data values
+        """
+
+        x, y, z, data = self._checktransinput(x, y, z, data)
+
+        # remove normalize flag for C-code
+        flags = utilities.set_bit(self.flags, 2)
         cxrayutilities.gridder3d(x, y, z, data, self.nx, self.ny, self.nz,
                                  self.xmin, self.xmax,
                                  self.ymin, self.ymax,
                                  self.zmin, self.zmax,
                                  self._gdata, self._gnorm, flags)
+
+
+class FuzzyGridder3D(Gridder3D):
+    """
+    An 3D binning class considering every data point to have a finite volume.
+    If necessary one data point will be split fractionally over different
+    data bins. This is numerically more effort but represents better the
+    typical case of a experimental data, which do not represent a mathematical
+    point but have a finite size.
+
+    Currently only a quader can be considered as volume during the gridding.
+    """
+
+    def __call__(self, x, y, z, data, **kwargs):
+        """
+        Perform gridding on a set of data. After running the gridder
+        the 'data' object in the class is holding the gridded data.
+
+        Parameters
+        ----------
+        x :	ndarray
+            numpy array of arbitrary shape with x positions
+        y :	ndarray
+            numpy array of arbitrary shape with y positions
+        z :     ndarray
+            numpy array fo arbitrary shape with z positions
+        data :	ndarray
+            numpy array of arbitrary shape with data values
+        width :	float, tuple or list, optional
+            width of one data point. If not given half the bin size will be
+            used. The width can be given as scalar if it is equal for all three
+            dimensions, or as sequence of length 3.
+        """
+
+        for k in kwargs.keys():
+            if k not in ['width']:
+                raise Exception("unknown keyword argument given: allowed is"
+                                "'width': specifiying fuzzy data size")
+
+        x, y, z, data = self._checktransinput(x, y, z, data)
+
+        if 'width' in kwargs:
+            try:
+                length = len(kwargs['width'])
+            except TypeError:
+                length = 1
+            if length == 3:
+                wx, wy, wz = kwargs['width']
+            else:
+                wx = kwargs['width']
+                wy = wx
+                wz = wx
+        else:
+            wx = delta(self.xmin, self.xmax, self.nx) / 2.
+            wy = delta(self.ymin, self.ymax, self.ny) / 2.
+            wz = delta(self.zmin, self.zmax, self.nz) / 2.
+
+        # remove normalize flag for C-code
+        flags = utilities.set_bit(self.flags, 2)
+        cxrayutilities.fuzzygridder3d(x, y, z, data, self.nx, self.ny, self.nz,
+                                      self.xmin, self.xmax,
+                                      self.ymin, self.ymax,
+                                      self.zmin, self.zmax,
+                                      self._gdata, self._gnorm,
+                                      wx, wy, wz, flags)

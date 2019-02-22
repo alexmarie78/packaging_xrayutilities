@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2010-2012 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2010-2018 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 """
 Panalytical XML (www.XRDML.com) data file parser
@@ -22,13 +22,14 @@ based on the native python xml.dom.minidom module.
 want to keep the number of dependancies as small as possible
 """
 
-from xml.etree import cElementTree as ElementTree
-import numpy
-import os
+import os.path
 import warnings
+from xml.etree import cElementTree as ElementTree
 
-from .helper import xu_open
+import numpy
+
 from .. import config
+from .helper import xu_open
 
 
 class XRDMLMeasurement(object):
@@ -47,26 +48,40 @@ class XRDMLMeasurement(object):
         # get scans in <xrdMeasurement>
         slist = measurement.findall(self.namespace + "scan")
 
+        self.hkl = (numpy.nan, numpy.nan, numpy.nan)
+        self.material = ""
         self.ddict = {}
+        for field in ["countTime", "detector",
+                      "beamAttenuationFactors", "hkl"]:
+            self.ddict[field] = []
         is_scalar = 0
 
         # loop over all scan entries - scan points
         for s in slist:
             # check if scan is complete
             scanstatus = s.get("status")
-            if scanstatus == "Aborted" and len(slist) > 1:
+            if scanstatus in ("Aborted", "Not finished") and len(slist) > 1:
                 if config.VERBOSITY >= config.INFO_LOW:
                     print("XU.io.XRDMLFile: subscan has been aborted "
                           "(part of the data unavailable)!")
             else:
                 self.scanmotname = s.get("scanAxis")
+                reflection = s.find(self.namespace + "reflection")
+                if reflection:
+                    m = reflection.find(self.namespace + "material")
+                    if m:
+                        self.material = m.text
+                    hkl = reflection.find(self.namespace + "hkl")
+                    if hkl:
+                        hkl_h = int(hkl.find(self.namespace + "h").text)
+                        hkl_k = int(hkl.find(self.namespace + "k").text)
+                        hkl_l = int(hkl.find(self.namespace + "l").text)
+                        self.hkl = (hkl_h, hkl_k, hkl_l)
                 points = s.find(self.namespace + "dataPoints")
 
                 # add count time to output data
                 countTime = points.find(self.namespace +
                                         "commonCountingTime").text
-                if "countTime" not in self.ddict:
-                    self.ddict["countTime"] = []
                 self.ddict["countTime"].append(float(countTime))
 
                 # check for intensities first to get number of points in scan
@@ -75,8 +90,6 @@ class XRDMLMeasurement(object):
                 data_list = (numpy.fromstring(data, sep=" ") /
                              float(countTime)).tolist()
                 nofpoints = len(data_list)
-                if "detector" not in self.ddict:
-                    self.ddict["detector"] = []
                 self.ddict["detector"].append(data_list)
                 # if present read beamAttenuationFactors
                 # they are already corrected in the data file, but may be
@@ -88,8 +101,6 @@ class XRDMLMeasurement(object):
                     data_list = numpy.fromstring(data, sep=" ")
                     data_list = data_list.tolist()
                     nofpoints = len(data_list)
-                    if "beamAttenuationFactors" not in self.ddict:
-                        self.ddict["beamAttenuationFactors"] = []
                     self.ddict["beamAttenuationFactors"].append(data_list)
 
                 # read the axes position
@@ -100,20 +111,20 @@ class XRDMLMeasurement(object):
                     aunit = p.get("unit")
 
                     # read axis data
-                    l = p.findall(self.namespace + "listPositions")
+                    listp = p.findall(self.namespace + "listPositions")
                     s = p.findall(self.namespace + "startPosition")
                     e = p.findall(self.namespace + "endPosition")
-                    if len(l) != 0:  # listPositions
-                        l = l[0]
-                        data_list = numpy.fromstring(l.text, sep=" ")
+                    if listp:  # listPositions
+                        listp = listp[0]
+                        data_list = numpy.fromstring(listp.text, sep=" ")
                         data_list = data_list.tolist()
-                    elif len(s) != 0:  # start endPosition
+                    elif s:  # start endPosition
                         data_list = numpy.linspace(
                             float(s[0].text), float(e[0].text),
                             nofpoints).tolist()
                     else:  # commonPosition
-                        l = p.find(self.namespace + "commonPosition")
-                        data_list = numpy.fromstring(l.text, sep=" ")
+                        c = p.find(self.namespace + "commonPosition")
+                        data_list = numpy.fromstring(c.text, sep=" ")
                         data_list = data_list.tolist()
                         is_scalar = 1
 
@@ -152,6 +163,9 @@ class XRDMLMeasurement(object):
 
     def __str__(self):
         ostr = "XRDML Measurement\n"
+        if self.material:
+            ostr += "Material: '%s'; hkl: %s\n" % (self.material,
+                                                   str(self.hkl))
         for k in self.ddict.keys():
             ostr += "%s with %s points\n" % (k, str(self.ddict[k].shape))
 
@@ -166,24 +180,28 @@ class XRDMLFile(object):
     file
     """
 
-    def __init__(self, fname):
+    def __init__(self, fname, path=""):
         """
         initialization routine supplied with a filename
         the file is automatically parsed and the data are available
         in the "scan" object. If more <xrdMeasurement> tags are present, which
         should not be the case, their data is present in the "scans" object.
 
-        Parameter
-        ---------
-         fname:     filename of the XRDML file
-
+        Parameters
+        ----------
+        fname :     str
+            filename of the XRDML file
+        path :      str, optional
+            path to the XRDML file
         """
-        self.filename = fname
-        d = ElementTree.parse(xu_open(fname))
+        self.full_filename = os.path.join(path, fname)
+        self.filename = os.path.basename(self.full_filename)
+        with xu_open(self.full_filename) as fid:
+            d = ElementTree.parse(fid)
         root = d.getroot()
         try:
             namespace = root.tag[:root.tag.index('}')+1]
-        except:
+        except ValueError:
             namespace = ''
 
         slist = root.findall(namespace+"xrdMeasurement")
@@ -205,14 +223,6 @@ class XRDMLFile(object):
         return ostr
 
 
-def getOmPixcel(omraw, ttraw):
-    """
-    function to reshape the Omega values into a form needed for
-    further treatment with xrayutilities
-    """
-    return (omraw[:, numpy.newaxis] * numpy.ones(ttraw.shape)).flatten()
-
-
 def getxrdml_map(filetemplate, scannrs=None, path=".", roi=None):
     """
     parses multiple XRDML file and concatenates the results for parsing the
@@ -220,25 +230,36 @@ def getxrdml_map(filetemplate, scannrs=None, path=".", roi=None):
     parsing maps measured with the PIXCel 1D detector (and in limited way also
     for data acquired with a point detector -> see getxrdml_scan instead).
 
-    Parameter
-    ---------
-     filetemplate: template string for the file names, can contain
-                   a %d which is replaced by the scan number or be a
-                   list of filenames
-     scannrs:      int or list of scan numbers
-     path:         common path to the filenames
-     roi:          region of interest for the PIXCel detector,
-                   for other measurements this is not usefull!
+    Parameters
+    ----------
+    filetemplate :  str
+        template string for the file names, can contain a %d which is replaced
+        by the scan number or be a list of filenames
+    scannrs :       int or list, optional
+        scan number(s)
+    path :          str, optional
+        common path to the filenames
+    roi :           tuple, optional
+        region of interest for the PIXCel detector, for other measurements this
+        is not useful!
 
     Returns
     -------
-     om,tt,psd: as flattened numpy arrays
+    om, tt, psd :   ndarray
+        motor positions and data as flattened numpy arrays
 
-    Example
-    -------
-     >>> om,tt,psd = xrayutilities.io.getxrdml_map("samplename_%d.xrdml",
-                                                   [1,2], path="./data")
+    Examples
+    --------
+    >>> om, tt, psd = xrayutilities.io.getxrdml_map("samplename_%d.xrdml",
+    >>>                                             [1, 2], path="./data")
     """
+    def getOmPixcel(omraw, ttraw):
+        """
+        function to reshape the Omega values into a form needed for
+        further treatment with xrayutilities
+        """
+        return (omraw[:, numpy.newaxis] * numpy.ones(ttraw.shape)).flatten()
+
     # read raw data and convert to reciprocal space
     om = numpy.zeros(0)
     tt = numpy.zeros(0)
@@ -290,44 +311,43 @@ def getxrdml_scan(filetemplate, *motors, **kwargs):
     xrayutilities.io.XRDMLFile class is used. The function can be used for
     parsing arbitrary scans and will return the the motor values of the scan
     motor and additionally the positions of the motors given by in the
-    "*motors" argument
+    ``*motors`` argument
 
-    Parameter
-    ---------
-     filetemplate: template string for the file names, can contain
-                   a %d which is replaced by the scan number or be a
-                   list of filenames given by the scannrs keyword argument
+    Parameters
+    ----------
+    filetemplate :  str
+        template string for the file names, can contain a %d which is replaced
+        by the scan number or be a list of filenames given by the scannrs
+        keyword argument
 
-     *motors:      motor names to return: e.g.: 'Omega','2Theta',...
-                   one can also use abbreviations
-                   'Omega' = 'om' = 'o'
-                   '2Theta' = 'tt' = 't'
-                   'Chi' = 'c'
-                   'Phi' = 'p'
+    motors :        str
+        motor names to return: e.g.: 'Omega', '2Theta', ...  one can also use
+        abbreviations:
 
-     **kwargs:
-       scannrs:      int or list of scan numbers
-       path:         common path to the filenames
+         - 'Omega' = 'om' = 'o'
+         - '2Theta' = 'tt' = 't'
+         - 'Chi' = 'c'
+         - 'Phi' = 'p'
+
+    scannrs :       int or list, optional
+        scan number(s)
+    path :          str, optional
+        common path to the filenames
 
     Returns
     -------
-     scanmot,mot1,mot2,...,detectorint: as flattened numpy arrays
+    scanmot, mot1, mot2,..., detectorint :  ndarray
+        motor positions and data as flattened numpy arrays
 
-    Example
-    -------
-     >>> scanmot,om,tt,inte = xrayutilities.io.getxrdml_scan(
-             "samplename_1.xrdml", 'om', 'tt', path="./data")
+    Examples
+    --------
+    >>> scanmot, om, tt, inte = xrayutilities.io.getxrdml_scan(
+    >>>     "samplename_1.xrdml", 'om', 'tt', path="./data")
     """
     flatten = True
     # parse keyword arguments
-    if 'path' in kwargs:
-        path = kwargs['path']
-    else:
-        path = '.'
-    if 'scannrs' in kwargs:
-        scannrs = kwargs['scannrs']
-    else:
-        scannrs = None
+    path = kwargs.get('path', '.')
+    scannrs = kwargs.get('scannrs', None)
 
     validmotors = ['Omega', '2Theta', 'Psi', 'Chi', 'Phi', 'Z', 'X', 'Y']
     validmotorslow = [mot.lower() for mot in validmotors]
@@ -336,10 +356,12 @@ def getxrdml_scan(filetemplate, *motors, **kwargs):
     for mot in motors:
         if mot.lower() in validmotorslow:
             motnames.append(validmotors[validmotorslow.index(mot.lower())])
-        elif mot.lower() in ['p']:
+        elif mot.lower() in ['phi', 'p']:
             motnames.append('Phi')
         elif mot.lower() in ['chi', 'c']:
             motnames.append('Chi')
+        elif mot.lower() in ['psi']:
+            motnames.append('Psi')
         elif mot.lower() in ['tt', 't']:
             motnames.append('2Theta')
         elif mot.lower() in ['om', 'o']:
@@ -395,7 +417,7 @@ def getxrdml_scan(filetemplate, *motors, **kwargs):
             for mot in motnames:
                 try:
                     angles = numpy.vstack((angles, s[mot]))
-                except:  # motor is not array
+                except ValueError:  # motor is not array
                     angles = numpy.vstack(
                         (angles, s[mot] * numpy.ones(detshape)))
             motvals = numpy.concatenate((motvals, angles), axis=1)

@@ -7,10 +7,11 @@ for details about the measurement see:
     http://dx.doi.org/10.1088/0957-4484/22/42/425704
 """
 
-import numpy
-import matplotlib.pyplot as plt
-import xrayutilities as xu
 import os
+
+import matplotlib.pyplot as plt
+import numpy
+import xrayutilities as xu
 
 # global setting for the experiment
 sample = "test"  # sample name used also as file name for the data file
@@ -22,12 +23,11 @@ nchannel = 1500  # number of channels of the detector
 
 # intensity normalizer function responsible for count time and absorber
 # correction
-absfun = lambda d: d["detcorr"] / d["psd2"].astype(numpy.float)
 normalizer_detcorr = xu.IntensityNormalizer(
     "MCA",
     mon="Monitor",
     time="Seconds",
-    absfun=absfun)
+    absfun=lambda d: d["detcorr"] / d["psd2"].astype(numpy.float))
 
 # substrate material used for Bragg peak calculation to correct for
 # experimental offsets

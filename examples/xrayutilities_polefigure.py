@@ -1,3 +1,7 @@
+# This file is part of xrayutilities.
+#
+# xrayutilities is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 #
@@ -11,11 +15,13 @@
 #
 # Copyright (C) 2012 Dominik Kriegner <dominik.kriegner@gmail.com>
 
-import xrayutilities as xu
-import numpy
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 import os.path
+from itertools import permutations
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy
+import xrayutilities as xu
 from mpl_toolkits.basemap import *
 
 datadir = "data"
@@ -37,44 +43,19 @@ mpl.rcParams['axes.grid'] = False
 # substrate
 Ge = xu.materials.Ge
 
-tup113 = (Ge.Q(1, 1, 3), Ge.Q(1, 3, 1),
-          Ge.Q(3, 1, 1), Ge.Q(-1, 1, 3),
-          Ge.Q(-1, 3, 1), Ge.Q(3, 1, -1),
-          Ge.Q(1, -1, 3), Ge.Q(1, 3, -1),
-          Ge.Q(3, -1, 1), Ge.Q(1, 1, -3),
-          Ge.Q(1, -3, 1), Ge.Q(-3, 1, 1),
-          Ge.Q(-1, -1, -3), Ge.Q(-1, -3, -1),
-          Ge.Q(-3, -1, -1), Ge.Q(1, -1, -3),
-          Ge.Q(1, -3, -1), Ge.Q(-3, -1, 1),
-          Ge.Q(-1, 1, -3), Ge.Q(-1, -3, 1),
-          Ge.Q(-3, 1, -1), Ge.Q(-1, -1, 3),
-          Ge.Q(-1, 3, -1), Ge.Q(3, -1, -1))
+hkls = list(permutations([1, 1, 3])) + list(permutations([-1, 1, 3])) +\
+       list(permutations([-1, -1, 3])) + list(permutations([1, 1, -3])) +\
+       list(permutations([-1, 1, -3])) + list(permutations([-1, -1, -3]))
 
-label113 = (
-    r'$(113)$',
-    r'$(131)$',
-    r'$(311)$',
-    r'$(\bar 113)$',
-    r'$(\bar 131)$',
-    r'$(31\bar 1)$',
-    r'$(1\bar 13)$',
-    r'$(13\bar 1)$',
-    r'$(3\bar 11)$',
-    r'$(11\bar 3)$',
-    r'$(1\bar 31)$',
-    r'$(\bar 311)$',
-    r'$(\bar 1\bar 1\bar 3)$',
-    r'$(\bar 1\bar 3\bar 1)$',
-    r'$(\bar 3\bar 1\bar 1)$',
-    r'$(1\bar 1\bar 3)$',
-    r'$(1\bar 3\bar 1)$',
-    r'$(\bar 3\bar 11)$',
-    r'$(\bar 1 1\bar 3)$',
-    r'$(\bar 1\bar 3 1)$',
-    r'$(\bar 3 1\bar 1)$',
-    r'$(\bar 1\bar 1 3)$',
-    r'$(\bar 1 3\bar 1)$',
-    r'$( 3\bar 1\bar 1)$')
+tup = []
+label = []
+for ind in hkls:
+    tup.append(Ge.Q(*ind))
+    lab = r'$('
+    for index in ind:
+        lab += '%s' % (r'\bar' if index < 0 else '') + str(abs(index))
+    lab += ')$'
+    label.append(lab)
 
 df = xu.io.XRDMLFile(os.path.join(datadir, "polefig_Ge113.xrdml.bz2"))
 s = df.scan
@@ -120,8 +101,8 @@ if (chi >= -eps):
            color='k', ms=12.)
 
 # plot Ge {113} Bragg peaks
-for i in range(len(tup113)):
-    dir = tup113[i]
+for i in range(len(tup)):
+    dir = tup[i]
     # calculate spherical coordinate angles
     dir = xu.math.rotarb(dir, Ge.Q(0, 0, 1), 27)
     [chi, phi] = xu.analysis.getangles(dir, ndir, inpdir)
@@ -132,4 +113,4 @@ for i in range(len(tup113)):
         x, y = m(phi, chi)
         m.plot(numpy.array([x]), numpy.array([y]), ls='None', marker='o',
                color='k', ms=8., mfc='None', mew=2.)
-        plt.text(x + 400000, y, label113[i], ha='left', va='bottom')
+        plt.text(x + 400000, y, label[i], ha='left', va='bottom')
