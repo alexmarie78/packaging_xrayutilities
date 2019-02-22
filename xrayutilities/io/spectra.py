@@ -20,17 +20,14 @@
 module to handle spectra data
 """
 
-import re
-import os
 import glob
-
 import numpy
+import re
+
 import numpy.lib.recfunctions
 from numpy import rec
-import h5py
-
-from .helper import xu_h5open
 from .. import config
+from .helper import xu_h5open
 
 re_wspaces = re.compile(r"\s+")
 re_colname = re.compile(r"^Col")
@@ -49,11 +46,11 @@ re_col_index = re.compile(r"\d+\s+")
 re_col_type = re.compile(r"\[.+\]")
 re_num = re.compile(r"[0-9]")
 
-dtype_map = {"FLOAT": "f4"}
+dtype_map = {"FLOAT": "f4",
+             "DOUBLE": "f8"}
 
 
 class SPECTRAFileComments(dict):
-
     """
     Class that describes the comments in the header of a SPECTRA file.
     The different comments are accessible via the comment keys.
@@ -64,7 +61,7 @@ class SPECTRAFileComments(dict):
 
     def __getattr__(self, name):
         if name in self:
-            return self[key]
+            return self[name]
 
 
 class SPECTRAFileParameters(dict):
@@ -150,7 +147,7 @@ class SPECTRAFileData(object):
     def __getitem__(self, key):
         try:
             return self.data[key]
-        except:
+        except IndexError:
             print("XU.io.specta.SPECTRAFileData: data contains no column "
                   "named: %s!" % key)
 
@@ -200,16 +197,16 @@ class SPECTRAFile(object):
     Constructor call. This class should work for data stored at
     beamlines P08 and BW2 at HASYLAB.
 
-    Required constructor arguments:
-    ------------------------------
-     filename ............. a string with the name of the SPECTRA file
+    Parameters
+    ----------
+    filename :  str
+        a string with the name of the SPECTRA file
 
-    Optional keyword arguments:
-    --------------------------
-     mcatmp ............... template for the MCA files
-     mcastart,mcastop ..... start and stop index for the MCA files, if not
-                            given, the class tries to determine the start and
-                            stop index automatically.
+    mcatmp :    str, optional
+        template for the MCA files
+    mcastart, mcastop : int, optional
+        start and stop index for the MCA files, if not given, the class tries
+        to determine the start and stop index automatically.
     """
 
     def __init__(self, filename, mcatmp=None, mcastart=None, mcastop=None):
@@ -231,10 +228,10 @@ class SPECTRAFile(object):
             else:
                 # try to determine the number of MCA spectra automatically
                 spat = self.mca_file_template.replace("%i", "*")
-                l = glob.glob(spat)
+                lst = glob.glob(spat)
                 self.mca_start_index = 1
                 self.mca_stop_index = 0
-                if len(l) != 0:
+                if lst:
                     self.mca_stop_index = self.data.data.size  # len(l)
 
             if self.mca_stop_index != 0:
@@ -248,17 +245,23 @@ class SPECTRAFile(object):
         If the mca attribute is not None mca data will be stored to an
         chunked array of with name mcaname.
 
-        required input arguments:
-         h5file .............. string or HDF5 file object
-         name ................ name of the group where to store the data
+        Parameters
+        ----------
+        h5file :    file-handle or str
+            HDF5 file object or name
+        name :	    str
+            name of the group where to store the data
 
-        optional keyword arguments:
-         group ............... root group where to store the data
-         mcaname ............. Name of the MCA in the HDF5 file
+        group :	    str, optional
+            root group where to store the data
+        mcaname :   str, optional
+            Name of the MCA in the HDF5 file
 
-        Return value:
-        The method returns None in the case of everything went fine, True
-        otherwise.
+        Returns
+        -------
+        bool or None
+            The method returns None in the case of everything went fine, True
+            otherwise.
         """
         with xu_h5open(h5file, 'w') as h5:
             # create the group where to store the data
@@ -273,7 +276,7 @@ class SPECTRAFile(object):
             for k in self.comments.keys():
                 try:
                     g.attrs[k] = self.comments[k]
-                except:
+                except IndexError:
                     print("XU.io.spectra.Save2HDF5: cannot save file comment "
                           "%s = %s to group %s!" % (k, self.comments[k], name))
 
@@ -281,7 +284,7 @@ class SPECTRAFile(object):
             for k in self.params.keys():
                 try:
                     g.attrs[k] = self.params[k]
-                except:
+                except IndexError:
                     print("XU.io.spectra.Save2HDF5: cannot save file parametes"
                           " %s to group %s!" % (k, name))
 
@@ -290,7 +293,7 @@ class SPECTRAFile(object):
 
             try:
                 dset = g.create_dataset("data", data=self.data.data, **kwds)
-            except:
+            except (RuntimeError, ValueError):
                 print("XU.io.spectra.Save2HDF5: cannot create table for "
                       "storing scan data!")
                 return True
@@ -299,7 +302,7 @@ class SPECTRAFile(object):
             if self.mca is not None:
                 try:
                     c = g.create_dataset(mcaname, data=self.mca, **kwds)
-                except:
+                except (RuntimeError, ValueError):
                     print("XU.io.spectra.Save2HDF5: cannot create carray %s "
                           "for MCA data!" % mcaname)
                     return True
@@ -341,31 +344,50 @@ class SPECTRAFile(object):
         """
         Read the data from the file.
         """
+
+        def addkeyval(lst, k, v):
+            """
+            add new key to a list. if key already exists a number will be
+            appended to the key name
+
+            Parameters
+            ----------
+            lst :   list
+            k :     str
+                key
+            v :     object
+                value
+            """
+            kcnt = 0
+            key = k
+            while key in lst:
+                key = k + "_%i" % (kcnt + 1)
+                kcnt += 1
+            lst[key] = v
+
         col_names = []
         col_units = []
         col_types = []
         rec_list = []
         with open(self.filename, 'rb') as fid:
-            while True:
-                lbuffer = fid.readline().decode('utf8', 'ignore')
-                if lbuffer == "":
-                    break
-                lbuffer = lbuffer.strip()
+            for line in fid:
+                line = line.decode('utf8', 'ignore')
+                line = line.strip()
 
                 # read the next line if the line starts with a "!"
-                if re_end_section.match(lbuffer):
+                if re_end_section.match(line):
                     continue
 
                 # select the which section to read
-                if re_comment_section.match(lbuffer):
+                if re_comment_section.match(line):
                     read_mode = 1
                     continue
 
-                if re_parameter_section.match(lbuffer):
+                if re_parameter_section.match(line):
                     read_mode = 2
                     continue
 
-                if re_data_section.match(lbuffer):
+                if re_data_section.match(line):
                     read_mode = 3
                     continue
 
@@ -373,12 +395,12 @@ class SPECTRAFile(object):
                 if read_mode == 1:
                     # read the file comments
                     try:
-                        (key, value) = lbuffer.split("=")
-                    except:
+                        (key, value) = line.split("=")
+                    except ValueError:
                         # avoid annoying output
                         if config.VERBOSITY >= config.INFO_ALL:
                             print("XU.io.SPECTRAFile.Read: cannot interpret "
-                                  "the comment string: %s" % (lbuffer))
+                                  "the comment string: %s" % (line))
                         continue
 
                     key = key.strip()
@@ -390,35 +412,25 @@ class SPECTRAFile(object):
                         key = "_" + key
                     value = value.strip()
                     if config.VERBOSITY >= config.DEBUG:
-                        print("XU.io.SPECTRAFile.Read: comment: k,v: %s, %s"
+                        print("XU.io.SPECTRAFile.Read: comment: k, v: %s, %s"
                               % (key, value))
 
                     try:
                         value = float(value)
-                    except:
+                    except ValueError:
                         pass
 
                     # need to handle the case, that a key may appear several
                     # times in the list
-                    kcnt = 0
-                    while True:
-                        try:
-                            self.comments[key] = value
-                            # if adding the key/value pair to the dictionary
-                            # was successful - leave the loop
-                            break
-                        except:
-                            key += "_%i" % (kcnt + 2)
-
-                        kcnt += 1
+                    addkeyval(self.comments, key, value)
 
                 elif read_mode == 2:
                     # read scan parameters
                     try:
-                        (key, value) = lbuffer.split("=")
-                    except:
+                        (key, value) = line.split("=")
+                    except ValueError:
                         print("XU.io.SPECTRAFile.Read: cannot interpret the "
-                              "parameter string: %s" % (lbuffer))
+                              "parameter string: %s" % (line))
 
                     key = key.strip()
                     # remove whitespaces to be conform with natural naming
@@ -429,50 +441,43 @@ class SPECTRAFile(object):
                         key = "_" + key
                     value = value.strip()
                     if config.VERBOSITY >= config.DEBUG:
-                        print("XU.io.SPECTRAFile.Read: parameter: k,v: %s, %s"
+                        print("XU.io.SPECTRAFile.Read: parameter: k, v: %s, %s"
                               % (key, value))
 
                     try:
                         value = float(value)
-                    except:
+                    except ValueError:
                         # if the conversion of the parameter to float
                         # fails it will be saved as a string
                         pass
 
                     # need to handle the case, that a key may appear several
                     # times in the list
-                    kcnt = 0
-                    while True:
-                        try:
-                            self.params[key] = value
-                            # if adding the key/value pair to the dictionary
-                            # was successful - leave the loop
-                            break
-                        except:
-                            key += "_%i" % (kcnt + 2)
-
-                        kcnt += 1
+                    addkeyval(self.params, key, value)
 
                 elif read_mode == 3:
-                    if re_column.match(lbuffer):
+                    if re_column.match(line):
                         try:
-                            unit = re_unit.findall(lbuffer)[0]
+                            unit = re_unit.findall(line)[0]
                         except IndexError:
                             unit = "NONE"
 
                         try:
-                            lval = re_obracket.split(lbuffer)[0]
-                            rval = re_cbracket.split(lbuffer)[-1]
+                            sline = re_obracket.split(line)
+                            if len(sline) == 1:
+                                raise IndexError
+                            lval = sline[0]
+                            rval = re_cbracket.split(line)[-1]
                             dtype = rval.strip()
-                            l = re_wspaces.split(lval)
-                            index = int(l[1])
-                            name = "".join(l[2:])
+                            lv = re_wspaces.split(lval)
+                            index = int(lv[1])
+                            name = "".join(lv[2:])
                             name = name.replace(':', '_')
                         except IndexError:
-                            l = re_wspaces.split(lbuffer)
-                            index = int(l[1])
-                            dtype = l[-1]
-                            name = "".join(l[2:-1])
+                            lv = re_wspaces.split(line)
+                            index = int(lv[1])
+                            dtype = lv[-1]
+                            name = "".join(lv[2:-1])
                             name = name.replace(':', '_')
 
                         # store column definition
@@ -487,16 +492,16 @@ class SPECTRAFile(object):
 
                     else:
                         # read data
-                        dlist = re_wspaces.split(lbuffer)
+                        dlist = re_wspaces.split(line)
                         for i in range(len(dlist)):
                             dlist[i] = float(dlist[i])
 
-                        rec_list.append(dlist)
+                        rec_list.append(tuple(dlist))
 
         if config.VERBOSITY >= config.DEBUG:
-            print("XU.io.SPECTRAFile.Read: data columns: name,type: %s, %s"
+            print("XU.io.SPECTRAFile.Read: data columns: name, type: %s, %s"
                   % (col_names, col_types))
-        if len(rec_list) != 0:
+        if rec_list:
             self.data.data = rec.fromrecords(rec_list, formats=col_types,
                                              names=col_names)
         else:
@@ -514,35 +519,36 @@ def geth5_spectra_map(h5file, scans, *args, **kwargs):
 
     Parameters
     ----------
-     h5f:     file object of a HDF5 file opened using h5py
-     scans:   number of the scans of the reciprocal space map (int,tuple or
-              list)
+    h5f :       file-handle or str
+        file object of a HDF5 file opened using h5py
+    scans :     int, tuple or list
+        number of the scans of the reciprocal space map
+    args:       str, optional
+        arbitrary number of motor names
 
-    *args:   arbitrary number of motor names (strings)
-     omname:  name of the omega motor (or its equivalent)
-     ttname:  name of the two theta motor (or its equivalent)
+            - omname:  name of the omega motor (or its equivalent)
+            - ttname:  name of the two theta motor (or its equivalent)
 
-    **kwargs (optional):
-     mca:        name of the mca data (if available) otherwise None
-                 (default: "MCA")
-     samplename: string with the hdf5-group containing the scan data
-                 if omitted the first child node of h5f.root will be used
-                 to determine the sample name
+    kwargs :    dict, optional
+    mca :       str, optional
+        name of the mca data (if available) otherwise None (default: "MCA")
+    samplename : str, optional
+        string with the hdf5-group containing the scan data if omitted the
+        first child node of h5f.root will be used to determine the sample name
 
     Returns
     -------
-     [ang1,ang2,...],MAP:
-                angular positions of the center channel of the position
-                sensitive detector (numpy.ndarray 1D) together with all the
-                data values as stored in the data file (includes the
-                intensities e.g. MAP['MCA']).
+    [ang1, ang2, ...] : list
+        angular positions of the center channel of the position
+        sensitive detector (numpy.ndarray 1D). one entry for every
+        `args`-argument given to the function
+    MAP :   ndarray
+        the data values as stored in the data file (includes the intensities
+        e.g. MAP['MCA']).
     """
 
     with xu_h5open(h5file) as h5:
-        if "mca" in kwargs:
-            mca = kwargs["mca"]
-        else:
-            mca = "MCA"
+        mca = kwargs.get('mca', 'MCA')
 
         if "samplename" in kwargs:
             basename = kwargs["samplename"]
@@ -588,12 +594,12 @@ def geth5_spectra_map(h5file, scans, *args, **kwargs):
                     buf = sdata[motname]
                     scanshape = buf.shape
                     angles[motname] = numpy.concatenate((angles[motname], buf))
-                except:
+                except ValueError:
                     notscanmotors.append(i)
             for i in notscanmotors:
                 motname = args[i]
                 buf = numpy.ones(scanshape) * \
-                    h5.getNodeAttr(h5scan, "%s" % motname)
+                    h5scan.attrs.get("%s" % motname)
                 angles[motname] = numpy.concatenate((angles[motname], buf))
 
     retval = []

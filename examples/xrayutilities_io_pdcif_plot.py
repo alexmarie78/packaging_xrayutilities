@@ -15,10 +15,11 @@
 #
 # Copyright (C) 2014 Dominik Kriegner <dominik.kriegner@gmail.com>
 
+import os
+
 import matplotlib.pyplot as plt
 import numpy
 import xrayutilities as xu
-import os
 
 # load powder diffraction cif data file
 # here use e.g. cif-file from ICDD
@@ -35,10 +36,8 @@ plt.xlabel('scattering angle (deg)')
 
 # load materials
 # structure cif from Pearson's crystal data database
-ciff = xu.materials.CIFFile(os.path.join('data', '1216385.cif'))
-st = xu.materials.Material("Sb2Te3", ciff.Lattice())
-pst = xu.Powder(st, en='CuKa12')
-pst.PowderIntensity(tt_cutoff=90)
+st = xu.materials.Crystal.fromCIF(os.path.join('data', '1216385.cif'))
+pst = xu.simpack.PowderDiffraction(st, tt_cutoff=90)
 
 height = 0.05
 # peak positions of Sb2Te3

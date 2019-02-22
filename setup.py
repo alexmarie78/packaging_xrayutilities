@@ -14,19 +14,27 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright (C) 2009 Eugen Wintersberger <eugen.wintersberger@desy.de>
-# Copyright (C) 2010-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2010-2016 Dominik Kriegner <dominik.kriegner@gmail.com>
 
-from distutils.core import setup, Extension
-from distutils.command.build_ext import build_ext
-from distutils.fancy_getopt import FancyGetopt
+import glob
 import os.path
-import numpy
 import sys
+from distutils.command.install import INSTALL_SCHEMES
+from distutils.errors import DistutilsArgError
+from distutils.fancy_getopt import FancyGetopt
+
+import numpy
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
 
 cliopts = []
 cliopts.append(("without-openmp", None, "build without OpenMP support"))
 
 options = FancyGetopt(option_table=cliopts)
+
+# Modify the data install dir to match the source install dir
+for scheme in INSTALL_SCHEMES.values():
+    scheme['data'] = scheme['purelib']
 
 # first read all the arguments passed to the script
 # we need to do this otherwise the --help commands would not work
@@ -35,7 +43,7 @@ try:
     # search the arguments for options we would like to use
     # get new args with the custom options stripped away
     args, opts = options.getopt(args)
-except:
+except DistutilsArgError:
     pass
 
 # set default flags
@@ -44,7 +52,6 @@ without_openmp = False
 for opts, values in options.get_option_order():
     if opts == "without-openmp":
         without_openmp = True
-
 
 copt = {'msvc': [],
         'mingw32': ['-std=c99'],
@@ -74,24 +81,20 @@ class build_ext_subclass(build_ext):
                 e.extra_link_args = lopt[c]
         build_ext.build_extensions(self)
 
+
 cmdclass = {'build_ext': build_ext_subclass}
 
-with open('README.txt') as f:
+with open('README.md') as f:
     long_description = f.read()
 
 extmodul = Extension(
     'xrayutilities.cxrayutilities',
-    sources=[os.path.join('xrayutilities', 'src', 'cxrayutilities.c'),
-             os.path.join('xrayutilities', 'src', 'gridder_utils.c'),
-             os.path.join('xrayutilities', 'src', 'gridder1d.c'),
-             os.path.join('xrayutilities', 'src', 'gridder2d.c'),
-             os.path.join('xrayutilities', 'src', 'block_average.c'),
-             os.path.join('xrayutilities', 'src', 'qconversion.c'),
-             os.path.join('xrayutilities', 'src', 'gridder3d.c'),
-             os.path.join('xrayutilities', 'src', 'file_io.c')
-             ],
+    sources=glob.glob(os.path.join('xrayutilities', 'src', '*.c')),
     define_macros=user_macros
     )
+
+with open('VERSION') as version_file:
+    version = version_file.read().strip()
 
 try:
     import sphinx
@@ -120,7 +123,8 @@ except ImportError:
 
 setup(
     name="xrayutilities",
-    version="1.2.0",
+    version="1.5.1",
+    version=version,
     author="Eugen Wintersberger, Dominik Kriegner",
     description="package for x-ray diffraction data evaluation",
     classifiers=[
@@ -129,6 +133,8 @@ setup(
         "Programming Language :: Python :: 3.2",
         "Programming Language :: Python :: 3.3",
         "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
         "Topic :: Scientific/Engineering :: Physics",
         "Intended Audience :: Science/Research",
         "Development Status :: 5 - Production/Stable",
@@ -139,10 +145,7 @@ setup(
     author_email="eugen.wintersberger@desy.de, dominik.kriegner@gmail.com",
     maintainer="Dominik Kriegner",
     maintainer_email="dominik.kriegner@gmail.com",
-    packages=[
-        "xrayutilities", "xrayutilities.math", "xrayutilities.io",
-        "xrayutilities.materials", "xrayutilities.analysis"
-        ],
+    packages=find_packages(exclude=['tests']),
     package_data={
         "xrayutilities": ["*.conf"],
         "xrayutilities.materials": [
@@ -150,11 +153,17 @@ setup(
             os.path.join("data", "*.cif")
             ]
         },
-    requires=['numpy', 'scipy', 'matplotlib', 'h5py'],
+    data_files=[('xrayutilities', ['VERSION'])],
+    requires=['numpy', 'scipy', 'h5py'],
+    extras_require={
+        'plot': ["matplotlib"],
+        'fit': ["lmfit"],
+        },
     include_dirs=[numpy.get_include()],
     ext_modules=[extmodul],
     cmdclass=cmdclass,
     url="http://xrayutilities.sourceforge.net",
     license="GPLv2",
+    test_suite="unittest2.collector",
     script_args=args
     )

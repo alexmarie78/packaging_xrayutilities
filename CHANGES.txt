@@ -1,3 +1,156 @@
+v1.5.1, 2019-01-07
+
+* simple unit cell visualization function: Crystal.show_unitcell()
+* add new 'radius' and 'color' properties to Elements
+* improve testing of various unit cell settings in CIFFile
+* fix bug in handling negative data in kill_spike, thanks to reihel for
+  reporting
+* Panalytical XRDML: parse hkl from file if present
+* CIF exporter and possibility to parse CIF files from string representations
+* new reflectivity code based on transfer matrices (contributed by Numan
+  Laanait, nlaanait@gmail.com)
+* unittest and code quality updates
+* show_reciprocal_space_plane function to plot a cut in reciprocal space
+  together with the peak positionn of a given material
+* new FourC experiment class, equivalent to HXRD, but using a four circle
+  goniometer for consistent Q2Ang and Ang2Q functions
+* add spline coefficients to PowderModel fits
+* allow single Layer object as argument in LayerModel
+* rewrite of line cut functions, shorter code, faster execution, more
+  versatile
+* avoid loops in Experiment.Q2Ang functions
+* clean README and add new CONTRIBUTIONS instructions
+
+v1.5.0, 2018-07-04
+
+* improved docstring formating
+* simulation code for diffuse X-ray reflectivity
+* more flexibility in defining materials Wyckoff positions
+* convenience function to calculate diffracted intensities of thin films to
+  compare various Bragg peaks (coplanar diffraction geoemetry)
+* simplify WyckoffBase of Alloy, by avoiding double entries
+* CIF parser now is able to fully parse files without symmetry operations
+* CIF parser now distinguishes multiple "_data" entries
+* improvement of the scanning XRD dataset parsers for ID01 (FastScan)
+* PEP8 improvements
+* speed optimization in EDF parser
+* add getheader_element to SPECScan
+* try to parse oxidation state of elements from a CIF file, and ignore '.' and
+  '?' values for Debye-Waller factors and occupation
+* numpy 1.14 related fixes (mostly in file parsers)
+* fix bugs in spacegroups whos Wyckoff position contains a multiplication
+* make U/UB matrix compatible with the definition in SPEC
+* remove deprecated Lattice/LatticeBase code
+* update XRR example
+
+v1.4.2, 2017-11-28 "The Praha edition"
+
+* introduce convenience function HKL to convert q-vectors to HKL of materials
+* update outdated information and fix typos in README
+* introduce abstract classes where useful
+* code cleanup (import statements)
+* vastly improved CIF file support with recognition of correct space group and
+  Wyckoff position
+* use AppVeyor.com for Windows testing and binary creation
+* make wavelength handling in PowderDiffraction more flexible
+* fix bug in SiGe alloy class
+* python2 fix for EDFFile which could have failed as described in issue #41
+* fix clear_bit utility function
+* fix float/int conversion in line cut functions for newer numpy
+
+v1.4.1, 2017-04-03
+
+* new materials (Cr, tetragonal BaTiO3)
+* fix bug in DarwinModel
+* fix multiprocessing on MS Windows platforms
+* fix BUG in tetragonal crystals (wrong symmetry was used!)
+
+v1.4.0, 2017-02-09
+
+* fix of negative HKL directions in RelaxationTriangle
+* new SGLattice class which replaces Lattice and allows for easier material
+  definitions
+* old Lattice class is still included but now deprecated and will be removed
+  in >1.5.0
+* new PowderExperiment, PowderDiffraction and PowderModel classes for proper
+  simulation of powder patterns. Thanks to Marcus Mendenhall for his
+  contribution of a Fundamentals parameter approach powder profile
+  calculation.
+* cache database results -> huge speedups in repeated calls with same
+  parameters
+* new file parser for ILL numor files (station D23, maybe more general)
+* add possibility to fix the pixel size when calibrating 2D detectors
+* new normalized Lorentzian function (NormLorentz1d)
+* add fully asymmetric Pseudovoigt (different width and eta)
+* remove unphysical variation of structure factor in kinematical 2-beam model
+* new dynamical multibeam simulations based on the Darwin theory of dynamical
+  diffraction
+* include pip install guide into readme
+* fix default wavelength selection in line cut functions.
+
+v1.3.3, 2016-08-24
+
+* fix packaging of the README.md file
+
+v1.3.2, 2016-08-24
+
+* call PowderIntensity from xu.Powder init routine
+* fix problems in Crystal class when no lattice base is defined
+* add parsing for simply chemical formulas in Amorphous definitions
+* fix setup.py issue related to test installation
+* fix bug in fuzzy gridders (first data point was not always treated correct!)
+* added absorption_length method in all material classes
+
+v1.3.1, 2016-05-19
+
+* fix windows build due to lack of support of C99 in MSVC
+
+v1.3.0, 2016-05-19
+
+* change to setuptools for installation/package building
+* major code cleanup (remove of duplicated code using Clone Digger)
+  http://clonedigger.sourceforge.net
+* bug fixes in Alloy initialization
+* documentation building now requires numpydoc
+* central version number in VERSION file (also available in the package after
+  importing: import xrayutilities as xu; xu.__version__
+* new examples using the new XRR and XRD simulation-code
+* improve handling of SiGe and AlGaAs alloy: alloying on atomic level
+* add relaxation parameter to PseudomoprhicMaterial to model partially relaxed
+  material
+* fix fwhm_exp for very narrow peaks
+* fitting of x-ray reflectivity using the lmfit package.
+  If you want to use this new feature you have to install lmfit
+  see https://pypi.python.org/pypi/lmfit/
+* new subpackage simpack for diffraction and reflectivity simulations from
+  thin film samples. So far implemented are
+  - a basic kinematical diffraction model
+  - two dynamical diffraction models (simplified and general 2-beam theory)
+  - a model for specular reflectivity calculations using a Parrat-like
+    formalism
+* fwhm_exp function was moved to math's subpackage! This was necessary in
+  order to avoid circular dependencies, but anyhow the function also
+  fits better there!
+* improvements of peak_fit function
+  - better ability to handle linear background
+  - more stable fitting due to use of deriavitives (PseudoVoigt)
+* minor improvement in peak_fit's plotting
+
+v1.2.1, 2016-01-08
+
+* Uiso parsing from CIF files for better structure factors
+* support for parsing Rigaku RAS files (Smartlab Guidance)
+* new getDetectorPos/Distance routines in QConversion
+  This can be used for all types of detectors to determine their position and
+  distance for data normalization purposes
+* add FuzzyGridder3D class
+* add FuzzyGridder2D class (see mailing-list for details)
+* add possibility of Pseudo-Angle (basically arbitrary contraints) to Q2AngFit
+* add Carbon(diamond), HOPG materials
+* enhancement in FIO file parser
+* much improved TIFF file parser
+* IntensityNormalizer gained possibility to normalize CCD data
+
 v1.2.0, 2015-08-03
 
 * Radicon file support was removed (no test scripts available!)

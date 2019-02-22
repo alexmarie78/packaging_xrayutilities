@@ -1,1 +1,20 @@
 build
+
+*~
+*.swp
+*.so
+
+# byte compiled files
+__pycache__/
+*.py[cod]
+
+# build files and tarball directory
+dist/
+build/
+MANIFEST
+xrayutilities.egg-info/
+
+# test coverage data
+.coverage
+.coveragerc
+htmlcov

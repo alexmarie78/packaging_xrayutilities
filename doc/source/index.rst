@@ -6,26 +6,45 @@
 Welcome to xrayutilities's documentation!
 =========================================
 
-If you look for downloading the package go to `Sourceforge <https://sourceforge.net/projects/xrayutilities>`_ (source distribution) or the `Python package index <https://pypi.python.org/pypi/xrayutilities>`_ (MS Windows binary).
-Installation instructions you find further down `Installation`_.
+If you look for downloading the package go to `Sourceforge <https://sourceforge.net/projects/xrayutilities>`_ or `GitHub <https://github.com/dkriegner/xrayutilities>`_ (source distribution) or the `Python package index <https://pypi.python.org/pypi/xrayutilities>`_ (MS Windows binary).
 
 Read more about *xrayutilities* below or in `Journal of Applied Crystallography 2013, Volume 46, 1162-1170 <http://dx.doi.org/10.1107/S0021889813017214>`_
 
+Installation
+============
+
+The easiest way to install *xrayutilities* is using the `Python package index version <https://pypi.python.org/pypi/xrayutilities>` and execute
+
+.. code-block:: bash
+
+ > pip install xrayutilities
+
+If you prefer the installation from sources see the `Source Installation`_ below.
 
 Introduction
 ============
 
-*xrayutilities* is a collection of scripts used to analyze x-ray diffraction data. It consists of a python package and several routines coded in C.
-It especially useful for the reciprocal space conversion of diffraction data taken with linear and area detectors.
+Mailing list and issue tracker
+------------------------------
 
-In the following two concepts of usage for the *xrayutilities* package will be described.
+To get in touch with us or report an issue please use the `mailing list <https://sourceforge.net/p/xrayutilities/mailman/xrayutilities-users/>`_ or the `Github issue tracker <https://github.com/dkriegner/xrayutilities/issues>`_.
+When you want to follow announcements of major changes or new releases its recommended to `sign up for the mailing list <https://sourceforge.net/projects/xrayutilities/lists/xrayutilities-users>`_
+
+Overview
+--------
+
+*xrayutilities* is a collection of scripts used to analyze and simulate x-ray diffraction data. It consists of a python package and several routines coded in C.
+It especially useful for the reciprocal space conversion of diffraction data taken with linear and area detectors. Several models for the simulation of thin film reflectivity and diffraction curves are included.
+
+In the following few concepts of usage for the *xrayutilities* package will be described.
 First one should get a brief idea of how to analyze x-ray diffraction data with *xrayutilities*.
-After that the concept of how angular coordinates of Bragg reflections are calculated is presented.
+Following that the concept of how angular coordinates of Bragg reflections are calculated is presented.
+Before describing in detail the installation a minimal example for thin film simulations is shown.
 
 Concept of usage
 ----------------
 
-.. image:: pics/xu_usage.png
+.. image:: pics/xu_usage.svg
     :width: 400px
     :align: right
     :alt: Flow diagram showing how to analyze x-ray diffraction data using xrayutilities
@@ -56,7 +75,7 @@ A practical example showing the usage is given below.
 Angle calculation using the material classes
 --------------------------------------------
 
-.. image:: pics/xu_usage_planning.png
+.. image:: pics/xu_usage_planning.svg
     :width: 400px
     :align: right
     :alt: Flow diagram showing how to calculate angular positions of Bragg reflection using xrayutilities
@@ -86,6 +105,32 @@ the result as reciprocal space map using matplotlib.
 
 More such examples can be found on the :ref:`examplespage` page.
 
+X-ray diffraction and reflectivity simulations
+----------------------------------------------
+
+**xrayutilties** includes a database with optical properties of materials and therefore simulation of reflectivity and diffraction data can be accomplished with relatively litte additional input. When the stack of layers is defined along with the layer thickness and material several models for calculation of X-ray reflectivity and dynamical/kinematical X-ray diffraction are provided.
+
+A minimal example for an AlGaAs superlattice structure is shown below. It shows how a basic stack of a superlattice is built from its ingredients and how the reflectivity and dynamical diffraction model are initialized in the most basic form::
+
+    import xrayutilities as xu
+    # Build the pseudomorphic sample stack using the elastic parameters
+    sub = xu.simpack.Layer(xu.materials.GaAs, inf)
+    lay1 = xu.simpack.Layer(xu.materials.AlGaAs(0.25), 75, relaxation=0.0)
+    lay2 = xu.simpack.Layer(xu.materials.AlGaAs(0.75), 25, relaxation=0.0)
+    pls = xu.simpack.PseudomorphicStack001('pseudo', sub+10*(lay1+lay2))
+    # simulate reflectivity
+    m = xu.simpack.SpecularReflectivityModel(pls, sample_width=5, beam_width=0.3)
+    alphai = linspace(0, 10, 1000)
+    Ixrr = m.simulate(alphai)
+    # simulate dynamical diffraction curve
+    alphai = linspace(29, 38, 1000)
+    md = xu.simpack.DynamicalModel(pls)
+    Idyn = md.simulate(alphai, hkl=(0, 0, 4))
+
+
+More detailed examples and description of model parameters can be found on the :ref:`simulationspage` page or in the ``examples`` directory.
+
+
 xrayutilities Python package
 ============================
 
@@ -96,13 +141,13 @@ xrayutilities Python package
 
 for more details see the full API documentation of :mod:`xrayutilities` found here: :ref:`expapi`.
 
-Installation
-============
+Source Installation
+===================
 
 Express instructions
 --------------------
 
- * install the dependencies (Windows: `pythonxy <http://www.pythonxy.com>`_; Linux/Unix: see below for dependencies).
+ * install the dependencies (Windows: `Python(x,y) <https://python-xy.github.io/>`_ or `WinPython <https://winpython.github.io/>`_; Linux/Unix: see below for dependencies).
  * download *xrayutilities* from `here <https://sourceforge.net/projects/xrayutilities>`_ or use git to check out the `latest <https://sourceforge.net/p/xrayutilities/code/>`_ version.
  * open a command line and navigate to the downloaded sources and execute:
 
@@ -130,18 +175,26 @@ large number of third party libraries and Python modules.
 
 The needed dependencies are:
  * **GCC** Gnu Compiler Collection or any compatible C compiler. On windows you most probably should use MinGW or CygWin. Others might work but are untested.
+ * **C-compiler** Gnu Compiler Collection or any compatible C compiler. On windows you most probably want to use the Microsoft compilers.
  * **HDF5** a versatile binary data format (library is implemented in C).
    Although the library is not called directly, it is needed by the h5py Python
    module (see below).
- * **Python** the scripting language in which most of *xrayutilities* code is written in.
+ * **Python** the scripting language in which most of *xrayutilities* code is written in. (version 2.7 or >= 3.2, including python dev headers)
+ * **setuptools** python package installer
  * **git** a version control system used to keep track on the *xrayutilities* development. (only needed for development)
 
 Additionally, the following Python modules are needed in order to make *xrayutilities* work as intended:
- * **Numpy** a Python module providing numerical array objects
- * **Scipy** a Python module providing standard numerical routines, which is heavily using numpy arrays
+ * **Numpy** a Python module providing numerical array objects (version >= 1.8)
+ * **Scipy** a Python module providing standard numerical routines, which is heavily using numpy arrays (version >= 0.11.0)
  * **h5py** a powerful Python interface to HDF5.
  * **Matplotlib** a Python module for high quality 1D and 2D plotting (optionally)
+ * **lmfit** a Python module for least-squares minimization with bounds and constraints (optionally needed for fitting XRR data)
  * **IPython** although not a dependency of *xrayutilities* the IPython shell is perfectly suited for the interactive use of the *xrayutilities* python package.
+
+For building the documention (which you do not need to do) the requirements are:
+ * **sphinx** the Python documentation generator
+ * **numpydoc** sphinx-extension needed to parse the API-documention
+ * **rst2pdf** pdf-generation using sphinx
 
 After installing all required packages you can continue with installing and
 building the C library.
@@ -224,11 +277,13 @@ Examples and API-documentation
    :maxdepth: 2
 
    examples
+   simulations
    xrayutilities
    xrayutilities.analysis
    xrayutilities.io
    xrayutilities.materials
    xrayutilities.math
+   xrayutilities.simpack   
    modules
 
 

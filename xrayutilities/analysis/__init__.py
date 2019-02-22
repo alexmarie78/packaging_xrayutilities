@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2011-2012 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2011-2016 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 """
 xrayutilities.analysis is a package for assisting with the analysis of
@@ -35,24 +35,13 @@ from .sample_align import fit_bragg_peak
 
 # functions from line_cuts.py
 from .line_cuts import get_qx_scan
+from .line_cuts import get_qy_scan
 from .line_cuts import get_qz_scan
-from .line_cuts import get_qz_scan_int
-
-from .line_cuts import get_omega_scan_q
-from .line_cuts import get_omega_scan_ang
-
-from .line_cuts import get_radial_scan_q
-from .line_cuts import get_radial_scan_ang
-
-from .line_cuts import get_ttheta_scan_q
-from .line_cuts import get_ttheta_scan_ang
-
-from .line_cuts import fwhm_exp
-
-# functions from line_cuts3d.py
-from .line_cuts3d import get_qx_scan3d
-from .line_cuts3d import get_qy_scan3d
-from .line_cuts3d import get_qz_scan3d
+from .line_cuts import get_omega_scan
+from .line_cuts import get_radial_scan
+from .line_cuts import get_ttheta_scan
 
 # misc
 from .misc import getangles
+from .misc import getunitvector
+from .misc import coplanar_intensity

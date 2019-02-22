@@ -1,9 +1,17 @@
+python-xrayutilities (1.5.1-1) unstable; urgency=medium
+
+  [ Alexandre Marie ]
+  * Updated to upstream version.
+  * Fixed several conflicts.
+
+ -- Alexandre Marie <alexandre.marie@synchrotron-soleil.fr>  Fri, 22 Feb 2019 13:57:22 +0100
+
 python-xrayutilities (1.2.0-1) UNRELEASED; urgency=medium
 
   [ Eugen Wintersberger ]
   * Initial release. (Closes: #723017)
 
   [ Alexandre Marie ]
-  * d/watch updated to download at the right url
+  * d/watch updated to download at the right url.
 
  -- Alexandre Marie <alexandre.marie@synchrotron-soleil.fr>  Fri, 22 Feb 2019 09:57:30 +0100

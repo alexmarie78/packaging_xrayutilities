@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2013 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2013-2016 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 
 """
@@ -22,18 +22,12 @@ convenience functions to open files for various data file reader
 these functions should be used in new parsers since they transparently allow to
 open gzipped and bzipped files
 """
-
-import os.path
-import gzip
 import bz2
-import sys
+import gzip
 import h5py
+import sys
 
-from .. import config
 from ..exception import InputError
-
-if sys.version_info >= (3, 3):
-    import lzma  # new in python 3.3
 
 
 # python 2to3 compatibility
@@ -46,32 +40,44 @@ except NameError:
 def xu_open(filename, mode='rb'):
     """
     function to open a file no matter if zipped or not. Files with extension
-    '.gz' or '.bz2' are assumed to be compressed and transparently opened to
-    read like usual files.
+    '.gz', '.bz2', and '.xz'  are assumed to be compressed and transparently
+    opened to read like usual files.
 
     Parameters
     ----------
-     filename:  filename of the file to open (full including path)
-     mode:      mode in which the file should be opened
+    filename :  str
+        filename of the file to open (full including path)
+    mode :      str, optional
+        mode in which the file should be opened
 
     Returns
     -------
-     file handle of the opened file
+    file-handle
+        handle of the opened file
 
-    If the file does not exist an IOError is raised by the open routine, which
-    is not caught within the function
+    Raises
+    ------
+    IOError
+        If the file does not exist an IOError is raised by the open routine,
+        which is not caught within the function
     """
 
-    if os.path.splitext(filename)[-1] == '.gz':
+    if filename.endswith('.gz'):
         fid = gzip.open(filename, mode)
-    elif os.path.splitext(filename)[-1] == '.bz2':
+    elif filename.endswith('.bz2'):
         fid = bz2.BZ2File(filename, mode)
-    elif os.path.splitext(filename)[-1] == '.xz':
+    elif filename.endswith('.xz'):
         if sys.version_info >= (3, 3):
+            import lzma
             fid = lzma.open(filename, mode)
         else:
-            raise TypeError("File compression type not supported in Python "
-                            "versions prior to 3.3")
+            try:
+                import contextlib
+                import lzma
+                fid = contextlib.closing(lzma.LZMAFile(filename, mode))
+            except ImportError:
+                raise TypeError("File compression type not supported! Install "
+                                "pyliblzma or switch to Python >3.3")
     else:
         fid = open(filename, mode)
 
@@ -83,13 +89,16 @@ class xu_h5open(object):
     helper object to decide if a HDF5 file has to be opened/closed when
     using with a 'with' statement.
     """
+
     def __init__(self, f, mode='r'):
         """
         Parameters
         ----------
-         f:     filename or h5py.File instance
-         mode:  mode in which the file should be opened. ignored in case a
-                file handle is passed as f
+        f :     str
+            filename or h5py.File instance
+        mode :  str, optional
+            mode in which the file should be opened. ignored in case a file
+            handle is passed as f
         """
         self.closeFile = True
         self.fid = None

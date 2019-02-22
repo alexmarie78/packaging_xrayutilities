@@ -1,12 +1,14 @@
 Notes about origin/copyright of files:
 
-*.cif .... structure files created by the webform [1] from 
-           published crystallographic data (Journal articles)
+f[01]*.dat.xz: database files from XOP/DABAX project [1]
 
-f[01]*.dat.xz: database files from XOP/DABAX project [2]
+nist_atom.dat: included from NIST Physical Reference Database [2]
 
-nist_atom.dat: included from NIST Physical Reference Database [3]
+colors.dat: colors for atoms as found in Jmol [3]
 
-[1] http://www.cryst.ehu.es/cgi-bin/cryst/programs/mcif2vesta/index.php
-[2] http://ftp.esrf.eu/pub/scisoft/xop2.3/
-[3] http://www.nist.gov/pml/data/comp.cfm
+atomic_radius.dat: atomic radii from Wikipedia [4]
+
+[1] http://ftp.esrf.eu/pub/scisoft/xop2.3/
+[2] http://www.nist.gov/pml/data/comp.cfm
+[3] http://jmol.sourceforge.net/jscolors/
+[4] https://en.wikipedia.org/wiki/Atomic_radii_of_the_elements_(data_page)

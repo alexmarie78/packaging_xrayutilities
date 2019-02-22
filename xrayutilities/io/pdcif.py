@@ -15,11 +15,10 @@
 #
 # Copyright (C) 2014 Dominik Kriegner <dominik.kriegner@gmail.com>
 
-import re
 import copy
-import shlex
-
 import numpy
+import re
+import shlex
 
 from . import xu_open
 from .. import config
@@ -53,9 +52,13 @@ class pdCIF(object):
     as numpy record array the columns can be accessed by name
 
     intensity fields:
-      _pd_meas_counts_total, _pd_meas_intensity_total,
-      _pd_proc_intensity_total, _pd_proc_intensity_net,
-      _pd_calc_intensity_total, _pd_calc_intensity_net
+
+      - `_pd_meas_counts_total`
+      - `_pd_meas_intensity_total`
+      - `_pd_proc_intensity_total`
+      - `_pd_proc_intensity_net`
+      - `_pd_calc_intensity_total`
+      - `_pd_calc_intensity_net`
 
     alternatively the data column name can be given as argument to the
     constructor
@@ -67,10 +70,11 @@ class pdCIF(object):
 
         Parameters
         ----------
-         filename:      filename of the file to be parsed
-         datacolumn:    name of data column to identify the data loop
-                        (default =None; means that a list of default names is
-                        used)
+        filename :      str
+            filename of the file to be parsed
+        datacolumn :    str, optional
+            name of data column to identify the data loop (default =None; means
+            that a list of default names is used)
         """
         self.filename = filename
         self.datacolumn = datacolumn
@@ -93,9 +97,10 @@ class pdCIF(object):
 
         Parameters
         ----------
-         fh:    file handle
-         breakAfterData:    (optional) allowing to stop the parsing after
-                            data loop was found (default:False)
+        fh :    file-handle
+        breakAfterData :    bool, optional
+            allowing to stop the parsing after data loop was found
+            (default:False)
         """
         loopStart = False
         dataLoop = False
@@ -195,15 +200,19 @@ class pdCIF(object):
         """
         function to parse a loop using numpy routines
 
-        Parameter
-        ---------
-         filehandle:    filehandle object to use as data source
-         fields:        field names in the loop
-         nentry:        number of entries in the loop
+        Parameters
+        ----------
+        filehandle :    file-handle
+            filehandle object to use as data source
+        fields :        iterable
+            field names in the loop
+        nentry :        int
+            number of entries in the loop
 
-        Return
-        ------
-         data:          data read from the file as numpy record array
+        Returns
+        -------
+        data :          ndarray
+            data read from the file as numpy record array
         """
         tmp = numpy.fromfile(filehandle, count=nentry * len(fields), sep=' ')
         data = numpy.rec.fromarrays(tmp.reshape((-1, len(fields))).T,
@@ -215,14 +224,13 @@ class pdCIF(object):
         function to parse a loop using python loops routines. the fields are
         added to the fileheader dictionary
 
-        Parameter
-        ---------
-         filehandle:    filehandle object to use as data source
-         fields:        field names in the loop
+        Parameters
+        ----------
+        filehandle :    file-handle
+            filehandle object to use as data source
+        fields :        iterable
+            field names in the loop
 
-        Return
-        ------
-         nothing
         """
         fh = filehandle
 
@@ -268,7 +276,7 @@ class pdESG(pdCIF):
 
     """
     class for parsing multiple pdCIF loops in one file.
-    This includes especially *.esg files which are supposed to
+    This includes especially ``*.esg`` files which are supposed to
     consist of multiple loops of pdCIF data with equal length.
 
     Upon parsing the class tries to combine the data of these different
@@ -300,10 +308,7 @@ class pdESG(pdCIF):
             tell = 0
             while True:  # try to parse all scans
                 tell = fh.tell()
-                try:
-                    self._parse_single(fh, breakAfterData=True)
-                except:
-                    break
+                self._parse_single(fh, breakAfterData=True)
                 if tell == fh.tell():
                     break
                 # copy changing data from header

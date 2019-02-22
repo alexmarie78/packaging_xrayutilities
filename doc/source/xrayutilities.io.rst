@@ -12,8 +12,8 @@ xrayutilities.io.cbf module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.io.desy_tty08 module
-----------------------------------
+xrayutilities.io.desy\_tty08 module
+-----------------------------------
 
 .. automodule:: xrayutilities.io.desy_tty08
     :members:
@@ -36,10 +36,26 @@ xrayutilities.io.fastscan module
     :undoc-members:
     :show-inheritance:
 
+xrayutilities.io.filedir module
+-------------------------------
+
+.. automodule:: xrayutilities.io.filedir
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 xrayutilities.io.helper module
 ------------------------------
 
 .. automodule:: xrayutilities.io.helper
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+xrayutilities.io.ill\_numor module
+----------------------------------
+
+.. automodule:: xrayutilities.io.ill_numor
     :members:
     :undoc-members:
     :show-inheritance:
@@ -52,8 +68,8 @@ xrayutilities.io.imagereader module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.io.panalytical_xml module
----------------------------------------
+xrayutilities.io.panalytical\_xml module
+----------------------------------------
 
 .. automodule:: xrayutilities.io.panalytical_xml
     :members:
@@ -68,8 +84,16 @@ xrayutilities.io.pdcif module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.io.rotanode_alignment module
-------------------------------------------
+xrayutilities.io.rigaku\_ras module
+-----------------------------------
+
+.. automodule:: xrayutilities.io.rigaku_ras
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+xrayutilities.io.rotanode\_alignment module
+-------------------------------------------
 
 .. automodule:: xrayutilities.io.rotanode_alignment
     :members:

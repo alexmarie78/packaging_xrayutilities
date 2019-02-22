@@ -14,7 +14,7 @@
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
 # Copyright (C) 2009-2010 Eugen Wintersberger <eugen.wintersberger@desy.de>
-# Copyright (C) 2009-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2009-2018 Dominik Kriegner <dominik.kriegner@gmail.com>
 # Copyright (C) 2012 Tanja Etzelstorfer <tanja.etzelstorfer@jku.at>
 
 """
@@ -28,17 +28,14 @@ configured to describe almost any goniometer geometry.
 """
 
 import numbers
+import re
+import warnings
+
 import numpy
 from numpy.linalg import norm
-import warnings
-import re
 
 # package internal imports
-from . import math
-from . import materials
-from . import utilities
-from . import cxrayutilities
-from . import config
+from . import config, cxrayutilities, math, utilities
 from .exception import InputError
 
 # python 2to3 compatibility
@@ -81,24 +78,28 @@ class QConversion(object):
 
         Parameters
         ----------
-        sampleAxis:     list or tuple of sample circles,
-                        e.g. ['x+','z+'] would mean two sample circles whereas
-                        the outer one turns righthanded around the x axis and
-                        the inner one turns righthanded around z.
+        sampleAxis :    list or tuple
+            sample circles, e.g. ['x+', 'z+'] would mean two sample circles
+            whereas the outer one turns righthanded around the x axis and the
+            inner one turns righthanded around z.
 
-        detectorAxis:   list or tuple of detector circles
-                        e.g. ['x-'] would mean a detector arm with a single
-                        motor turning lefthanded around the x-axis.
+        detectorAxis :  list or tuple
+            detector circles e.g. ['x-'] would mean a detector arm with a
+            single motor turning lefthanded around the x-axis.
 
-        r_i:            vector giving the direction of the primary beam
-                        (length is relevant only if translations are involved)
+        r_i :           array-like
+            vector giving the direction of the primary beam (length is relevant
+            only if translations are involved)
 
-        **kwargs:       optional keyword arguments
-            wl:         wavelength of the x-rays in Angstroem
-            en:         energy of the x-rays in electronvolt
-            UB:         matrix for conversion from (hkl) coordinates to Q of
-                        sample used to determine not Q but (hkl) (default:
-                        identity matrix)
+        kwargs :        dict, optional
+            optional keyword arguments
+        wl :            float or str, optional
+            wavelength of the x-rays in Angstroem
+        en :            float or str, optional
+            energy of the x-rays in electronvolt
+        UB :            array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: identity matrix)
         """
 
         for k in kwargs.keys():
@@ -120,7 +121,7 @@ class QConversion(object):
             self.r_i = numpy.array(r_i, dtype=numpy.double)
             if self.r_i.size != 3:
                 print("XU.QConversion: warning invalid primary beam "
-                      "direction given -> using [0,1,0]")
+                      "direction given -> using [0, 1, 0]")
                 self.r_i = numpy.array([0, 1, 0], dtype=numpy.double)
         else:
             raise TypeError("QConversion: invalid type of primary beam "
@@ -128,18 +129,11 @@ class QConversion(object):
                             "numpy.ndarray")
 
         # kwargs
-        if "wl" in kwargs:
-            self._set_wavelength(kwargs["wl"])
-        else:
-            self._set_wavelength(config.WAVELENGTH)
-
+        self._set_wavelength(kwargs.get("wl", config.WAVELENGTH))
         if "en" in kwargs:
             self._set_energy(kwargs["en"])
 
-        if 'UB' in kwargs:
-            self._set_UB(kwargs['UB'])
-        else:
-            self._set_UB(numpy.identity(3))
+        self._set_UB(kwargs.get('UB', numpy.identity(3)))
 
         self._linear_init = False
         self._area_init = False
@@ -164,9 +158,10 @@ class QConversion(object):
         property handler for _sampleAxis
         checks if a syntactically correct list of sample circles is given
 
-        Parameter
-        ---------
-         sampleAxis:     list or tuple of sample circles, e.g. ['x+','z+']
+        Parameters
+        ----------
+        sampleAxis :    list or tuple
+            sample circles, e.g. ['x+', 'z+']
         """
 
         if isinstance(sampleAxis, (basestring, list, tuple)):
@@ -191,7 +186,7 @@ class QConversion(object):
                                 config.KAPPA_ANGLE)(self._kappa_dir)
                         elif config.KAPPA_PLANE[1] == 'z':
                             self._kappa_dir = math.YRotation(
-                                -config.KAPPA_ANGLE)(self._kappa_dir)
+                                -1 * config.KAPPA_ANGLE)(self._kappa_dir)
                         else:
                             raise TypeError("Qconverision init: invalid "
                                             "kappa_plane in config!")
@@ -203,7 +198,7 @@ class QConversion(object):
                                 config.KAPPA_ANGLE)(self._kappa_dir)
                         elif config.KAPPA_PLANE[1] == 'x':
                             self._kappa_dir = math.ZRotation(
-                                -config.KAPPA_ANGLE)(self._kappa_dir)
+                                -1 * config.KAPPA_ANGLE)(self._kappa_dir)
                         else:
                             raise TypeError("Qconverision init: invalid "
                                             "kappa_plane in config!")
@@ -215,7 +210,7 @@ class QConversion(object):
                                 config.KAPPA_ANGLE)(self._kappa_dir)
                         elif config.KAPPA_PLANE[1] == 'y':
                             self._kappa_dir = math.XRotation(
-                                -config.KAPPA_ANGLE)(self._kappa_dir)
+                                -1 * config.KAPPA_ANGLE)(self._kappa_dir)
                         else:
                             raise TypeError("Qconverision init: invalid "
                                             "kappa_plane in config!")
@@ -225,7 +220,7 @@ class QConversion(object):
 
                     # rotation sense
                     if circ[1] == '-':
-                        self._kappa_dir = -self._kappa_dir
+                        self._kappa_dir *= -1
 
                     if config.VERBOSITY >= config.DEBUG:
                         print("XU.QConversion: kappa_dir: (%5.3f %5.3f %5.3f)"
@@ -245,7 +240,8 @@ class QConversion(object):
 
         Returns
         -------
-        list of sample axis following the syntax /[xyzk][+-]/
+        list
+            sample axes following the syntax /[xyzk][+-]/
         """
         return self._sampleAxis
 
@@ -254,12 +250,13 @@ class QConversion(object):
         property handler for _detectorAxis_
         checks if a syntactically correct list of detector circles is given
 
-        Parameter
-        ---------
-         detectorAxis:     list or tuple of detector circles, e.g. ['x+']
-         detrot:           flag to tell that the detector rotation is going to
-                           be added (used internally to avoid double adding of
-                           detector rotation axis)
+        Parameters
+        ----------
+        detectorAxis :     list or tuple
+            detector circles, e.g. ['x+']
+        detrot :           bool, optional
+            flag to tell that the detector rotation is going to be added (used
+            internally to avoid double adding of detector rotation axis)
         """
         has_translations = False
         if isinstance(detectorAxis, (basestring, list, tuple)):
@@ -305,7 +302,7 @@ class QConversion(object):
     def _set_UB(self, UB):
         """
         set the orientation matrix used in the Qconversion
-        needs to be (3,3) matrix
+        needs to be (3, 3) matrix
         """
         tmp = numpy.array(UB)
         if tmp.shape != (3, 3) and tmp.size != 9:
@@ -374,12 +371,13 @@ class QConversion(object):
 
         Parameters
         ----------
-         *args:     arguments from the QConversion routine (sample and detector
-                    angles)
+        args :      list
+            arguments from the QConversion routine (sample and detector angles)
 
         Returns
         -------
-         Npoints:   integer to tell the number of points given
+        Npoints :   int
+            integer to tell the number of points given
         """
         np = 1
         for a in args:
@@ -405,34 +403,35 @@ class QConversion(object):
     def _reshapeInput(self, npoints, delta, circles, *args, **kwargs):
         """
         helper function to reshape the input of arguments to
-        (len(args),npoints) The input arguments must be either scalars or are
+        (len(args), npoints) The input arguments must be either scalars or are
         of length npoints.
 
         Parameters
         ----------
-         npoints:   length of the input arrays
-         delta:     value to substract from the input arguments as array with
-                    len(args)
-         circles:   list of circle description to decide if degree/radians
-                    conversion is needed
-         *args:     input arrays and scalars
-         **kwargs:  optional keyword argument to tell if values of rotation
-                    axis should be converted to radiants (name= 'deg',
-                    default=True)
+        npoints :   int
+            length of the input arrays
+        delta :     list or array-like
+            value to substract from the input arguments as array with len(args)
+        circles :   list
+            list of circle description to decide if degree/radians conversion
+            is needed
+        args :      list
+            input arrays and scalars
+        kwargs :    dict, optional
+            optional keyword argument to tell if values of rotation axis should
+            be converted to radiants (name= 'deg', default=True)
 
         Returns
         -------
-         inarr:     numpy.ndarray of shape (len(args),npoints) with the input
-                    arguments
-         retshape:  shape of return values
+        inarr :     ndarray
+            array of shape (len(args), npoints) with the input arguments
+        retshape :  tuple
+            shape of return values
         """
 
         inarr = numpy.empty((len(args), npoints), dtype=numpy.double)
         retshape = (npoints,)  # default value
-        if 'deg' in kwargs:
-            deg2rad = kwargs['deg']
-        else:
-            deg2rad = True
+        deg2rad = kwargs.get('deg', True)
 
         for i in range(len(args)):
             arg = args[i]
@@ -459,6 +458,63 @@ class QConversion(object):
 
         return inarr, retshape
 
+    def _parse_common_kwargs(self, **kwargs):
+        """
+        parse common keyword arguments to QConversion calls
+
+        Parameters
+        ----------
+        delta :     list or array-like, optional
+            delta angles to correct the given ones for misalignment.
+            delta must be an numpy array or list of len(*args). used angles are
+            than ``*args - delta``
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: self.UB)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        en :        float, optional
+            x-ray energy in eV (default is converted self._wl). both wavelength
+            and energy can also be an array which enables the QConversion for
+            energy scans.  Note that the `en` keyword overrules the `wl`
+            keyword!
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+        sampledis : tuple or list or array-like
+            sample displacement vector in relative units of the detector
+            distance (default: (0, 0, 0))
+        """
+        flags = 0
+        if self._has_translations:
+            flags = utilities.set_bit(flags, 0)
+
+        Ns = len(self.sampleAxis)
+        Nd = len(self.detectorAxis)
+        if self._area_detrotaxis_set:
+            Nd -= 1  # do not consider detector rotation for point detector
+        Ncirc = Ns + Nd
+
+        # kwargs
+        wl = utilities.wavelength(kwargs.get('wl', self._wl))
+        if 'en' in kwargs:
+            wl = utilities.lam2en(utilities.energy(kwargs['en']))
+
+        deg = kwargs.get('deg', True)
+
+        delta = numpy.asarray(kwargs.get('delta', numpy.zeros(Ncirc)),
+                              dtype=numpy.double)
+        if delta.size != Ncirc:
+            raise InputError("QConversion: keyword argument delta does "
+                             "not have an appropriate shape")
+
+        UB = numpy.asarray(kwargs.get('UB', self.UB))
+
+        sd = numpy.asarray(kwargs.get('sampledis', [0, 0, 0]))
+        if 'sampledis' in kwargs:
+            flags = utilities.set_bit(flags, 2)
+
+        return Ns, Nd, Ncirc, wl, deg, delta, UB, sd, flags
+
     def __call__(self, *args, **kwargs):
         """
         wrapper function for point(...)
@@ -472,41 +528,47 @@ class QConversion(object):
 
         Parameters
         ----------
-        *args:           sample and detector angles as numpy array, lists
-                         or Scalars in total
-                         len(self.sampleAxis)+len(detectorAxis) must be given,
-                         always starting with the outer most circle.  all
-                         arguments must have the same shape or length but can
-                         be mixed with Scalars (i.e. if an angle is always the
-                         same it can be given only once instead of an array)
+        args :      ndarray, list or Scalars
+            sample and detector angles; in total `len(self.sampleAxis) +
+            len(detectorAxis)` must be given, always starting with the outer
+            most circle. all arguments must have the same shape or length but
+            can be mixed with Scalars (i.e. if an angle is always the same it
+            can be given only once instead of an array)
 
-             sAngles:    sample circle angles, number of arguments must
-                         correspond to len(self.sampleAxis)
-             dAngles:    detector circle angles, number of arguments must
-                         correspond to len(self.detectorAxis)
+             - sAngles :
+                sample circle angles, number of arguments must correspond to
+                len(self.sampleAxis)
+             - dAngles :
+                detector circle angles, number of arguments must correspond to
+                len(self.detectorAxis)
 
-         **kwargs:       optional keyword arguments
-             delta:      giving delta angles to correct the given ones for
-                         misalignment delta must be an numpy array or list
-                         of len(*args)
-                         used angles are than *args - delta
-             UB:         matrix for conversion from (hkl) coordinates to Q of
-                         sample used to determine not Q but (hkl) (default:
-                         self.UB)
-             wl:         x-ray wavelength in angstroem (default: self._wl)
-             en:         x-ray energy in eV (default is converted self._wl)
-                         both wavelength and energy can also be an array
-                         which enables the QConversion for energy scans.
-                         Note that the en keyword overrules the wl keyword!
-             deg:        flag to tell if angles are passed as degree
-                         (default: True)
-             sampledis:  sample displacement vector in relative units of the
-                         detector distance (default: (0,0,0))
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list or array-like, optional
+            delta angles to correct the given ones for misalignment.
+            delta must be an numpy array or list of ``len(*args)``. used angles
+            are then ``*args - delta``
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: self.UB)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        en :        float, optional
+            x-ray energy in eV (default is converted self._wl). both wavelength
+            and energy can also be an array which enables the QConversion for
+            energy scans.  Note that the `en` keyword overrules the `wl`
+            keyword!
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+        sampledis : tuple or list or array-like
+            sample displacement vector in relative units of the detector
+            distance (default: (0, 0, 0))
 
         Returns
         -------
-        reciprocal space positions as numpy.ndarray with shape ( * , 3 )
-        where * corresponds to the number of points given in the input
+        ndarray
+            reciprocal space positions as numpy.ndarray with shape ``(N , 3)``
+            where `N` corresponds to the number of points given in the input
         """
 
         for k in kwargs.keys():
@@ -518,42 +580,8 @@ class QConversion(object):
                                 "'deg': True if angles are in degrees, "
                                 "'sampledis': sample displacement vector")
 
-        Ns = len(self.sampleAxis)
-        Nd = len(self.detectorAxis)
-        if self._area_detrotaxis_set:
-            Nd -= 1  # do not consider detector rotation for point detector
-        Ncirc = Ns + Nd
-
-        # kwargs
-        if 'wl' in kwargs:
-            wl = utilities.wavelength(kwargs['wl'])
-        else:
-            wl = self._wl
-        if 'en' in kwargs:
-            wl = utilities.lam2en(utilities.energy(kwargs['en']))
-
-        if 'deg' in kwargs:
-            deg = kwargs['deg']
-        else:
-            deg = True
-
-        if 'delta' in kwargs:
-            delta = numpy.array(kwargs['delta'], dtype=numpy.double)
-            if delta.size != Ncirc:
-                raise InputError("QConversion: keyword argument delta does "
-                                 "not have an appropriate shape")
-        else:
-            delta = numpy.zeros(Ncirc)
-
-        if 'UB' in kwargs:
-            UB = numpy.array(kwargs['UB'])
-        else:
-            UB = self.UB
-
-        if 'sampledis' in kwargs:
-            sd = numpy.array(kwargs['sampledis'])
-        else:
-            sd = numpy.zeros(3)
+        Ns, Nd, Ncirc, wl, deg, delta, UB, sd, flags = \
+            self._parse_common_kwargs(**kwargs)
 
         # prepare angular arrays from *args
         # need one sample angle and one detector angle array
@@ -593,26 +621,15 @@ class QConversion(object):
             print("XU.QConversion: sAngles / dAngles %s / %s"
                   % (str(sAngles), str(dAngles)))
 
-        if numpy.any(sd):
-            cfunc = cxrayutilities.ang2q_conversion_sd
-            if self._has_translations:
-                cfunc = cxrayutilities.ang2q_conversion_sdtrans
-            qpos = cfunc(
-                sAngles, dAngles, self.r_i, sAxis, dAxis,
-                self._kappa_dir, UB, sd, wl, config.NTHREADS)
-        else:
-            cfunc = cxrayutilities.ang2q_conversion
-            if self._has_translations:
-                cfunc = cxrayutilities.ang2q_conversion_trans
-            qpos = cfunc(
-                sAngles, dAngles, self.r_i, sAxis, dAxis,
-                self._kappa_dir, UB, wl, config.NTHREADS)
+        qpos = cxrayutilities.ang2q_conversion(
+            sAngles, dAngles, self.r_i, sAxis, dAxis,
+            self._kappa_dir, UB, sd, wl, config.NTHREADS, flags)
 
         if Npoints == 1:
             return (qpos[0, 0], qpos[0, 1], qpos[0, 2])
         else:
-            return numpy.reshape(qpos[:, 0], retshape),\
-                numpy.reshape(qpos[:, 1], retshape),\
+            return numpy.reshape(qpos[:, 0], retshape), \
+                numpy.reshape(qpos[:, 1], retshape), \
                 numpy.reshape(qpos[:, 2], retshape)
 
     def init_linear(self, detectorDir, cch, Nchannel, distance=None,
@@ -624,28 +641,34 @@ class QConversion(object):
 
         Parameters
         ----------
-         detectorDir:     direction of the detector (along the pixel array);
-                          e.g. 'z+'
-         cch:             center channel, in direction of self.r_i at zero
-                          detectorAngles
-         Nchannel:        total number of detector channels
-         distance:        distance of center channel from center of rotation
-         pixelwidth:      width of one pixel (same unit as distance)
-         chpdeg:          channels per degree (only absolute value is relevant)
-                          sign determined through detectorDir
+        detectorDir :   str
+            direction of the detector (along the pixel array); e.g. 'z+'
+        cch :           float
+            center channel, in direction of self.r_i at zero detectorAngles
+        Nchannel :      int
+            total number of detector channels
+        distance :      float, optional
+            distance of center channel from center of rotation
+        pixelwidth :    float, optional
+            width of one pixel (same unit as distance)
+        chpdeg :        float, optional
+            channels per degree (only absolute value is relevant) sign
+            determined through detectorDir
+        tilt :          float, optional
+            tilt of the detector axis from the detectorDir (in degree)
+        kwargs:         dict, optional
+            optional keyword arguments
+        Nav :           int, optional
+            number of channels to average to reduce data size (default: 1)
+        roi :           tuple or list
+            region of interest for the detector pixels; e.g. [100, 900]
 
-                          !! Either distance and pixelwidth or chpdeg must be
-                          given !!
-         tilt:            tilt of the detector axis from the detectorDir (in
-                          degree)
+            Note:
+                Either distance and pixelwidth or chpdeg must be given !!
 
-            Note: the channel numbers run from 0 .. Nchannel-1
+            Note:
+                the channel numbers run from 0 .. Nchannel-1
 
-        **kwargs:        optional keyword arguments
-          Nav:           number of channels to average to reduce data size
-                         (default: 1)
-          roi:           region of interest for the detector pixels; e.g.
-                         [100,900]
         """
 
         for k in kwargs.keys():
@@ -681,19 +704,26 @@ class QConversion(object):
                              "pixelwidth or chpdeg")
 
         # kwargs
-        if 'roi' in kwargs:
-            self._linear_roi = kwargs['roi']
-        else:
-            self._linear_roi = [0, self._linear_Nch]
-        if 'Nav' in kwargs:
-            self._linear_nav = kwargs['Nav']
-        else:
-            self._linear_nav = 1
+        self._linear_roi = kwargs.get('roi', [0, self._linear_Nch])
+        self._linear_nav = kwargs.get('Nav', 1)
 
         # rescale r_i
         self.r_i = math.VecUnit(self.r_i) * self._linear_distance
 
         self._linear_init = True
+
+    def _get_detparam_linear(self, oroi, nav):
+        """
+        initialize linear detector geometry for C subroutines. This function
+        considers the Nav and roi options.
+        """
+        cch = self._linear_cch / float(nav)
+        pwidth = self._linear_pixwidth * nav
+        roi = numpy.array(oroi)
+        roi[0] = numpy.floor(oroi[0] / float(nav))
+        roi[1] = numpy.ceil((oroi[1] - oroi[0]) / float(nav)) + roi[0]
+        roi = roi.astype(numpy.int32)
+        return cch, pwidth, roi
 
     def linear(self, *args, **kwargs):
         """
@@ -706,39 +736,47 @@ class QConversion(object):
 
         Parameters
         ----------
-        *args:          sample and detector angles as numpy array, lists or
-                        Scalars in total len(self.sampleAxis)+len(detectorAxis)
-                        must be given, always starting with the outer most
-                        circle.  all arguments must have the same shape or
-                        length but can be mixed with Scalars (i.e. if an angle
-                        is always the same it can be given only once instead of
-                        an array)
+        args :      ndarray, list or Scalars
+            sample and detector angles; in total `len(self.sampleAxis) +
+            len(detectorAxis)` must be given, always starting with the outer
+            most circle. all arguments must have the same shape or length but
+            can be mixed with Scalars (i.e. if an angle is always the same it
+            can be given only once instead of an array)
 
-            sAngles:    sample circle angles, number of arguments must
-                        correspond to len(self.sampleAxis)
-            dAngles:    detector circle angles, number of arguments must
-                        correspond to len(self.detectorAxis)
+             - sAngles :
+                sample circle angles, number of arguments must correspond to
+                len(self.sampleAxis)
+             - dAngles :
+                detector circle angles, number of arguments must correspond to
+                len(self.detectorAxis)
 
-        **kwargs:       possible keyword arguments
-            delta:      giving delta angles to correct the given ones for
-                        misalignment delta must be an numpy array or list of
-                        len(*args) used angles are than *args - delta
-            UB:         matrix for conversion from (hkl) coordinates to Q of
-                        sample used to determine not Q but (hkl) (default:
-                        self.UB)
-            Nav:        number of channels to average to reduce data size
-                        (default: self._linear_nav)
-            roi:        region of interest for the detector pixels; e.g.
-                        [100,900] (default: self._linear_roi)
-            wl:         x-ray wavelength in angstroem (default: self._wl)
-            en:         x-ray energy in eV (default is converted self._wl)
-                        both wavelength and energy can also be an array
-                        which enables the QConversion for energy scans.
-                        Note that the en keyword overrules the wl keyword!
-            deg:        flag to tell if angles are passed as degree (default:
-                        True)
-            sampledis:  sample displacement vector in same units as the
-                        detector distance (default: (0, 0, 0))
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list or array-like, optional
+            delta angles to correct the given ones for misalignment.
+            delta must be an numpy array or list of ``len(*args)``. used angles
+            are then ``*args - delta``
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: self.UB)
+        Nav :       int, optional
+            number of channels to average to reduce data size (default:
+            self._linear_nav)
+        roi :       list or tuple, optional
+            region of interest for the detector pixels; e.g.  [100, 900]
+            (default: self._linear_roi)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        en :        float, optional
+            x-ray energy in eV (default is converted self._wl). both wavelength
+            and energy can also be an array which enables the QConversion for
+            energy scans.  Note that the `en` keyword overrules the `wl`
+            keyword!
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+        sampledis : tuple or list or array-like
+            sample displacement vector in relative units of the detector
+            distance (default: (0, 0, 0))
 
         Returns
         -------
@@ -762,50 +800,13 @@ class QConversion(object):
                                 "'roi': region of interest, "
                                 "'sampledis': sample displacement vector")
 
-        Ns = len(self.sampleAxis)
-        Nd = len(self.detectorAxis)
-        Ncirc = Ns + Nd
+        Ns, Nd, Ncirc, wl, deg, delta, UB, sd, flags = \
+            self._parse_common_kwargs(**kwargs)
 
-        # kwargs
-        if 'wl' in kwargs:
-            wl = utilities.wavelength(kwargs['wl'])
-        else:
-            wl = self._wl
-        if 'en' in kwargs:
-            wl = utilities.lam2en(utilities.energy(kwargs['en']))
+        # extra keyword arguments
+        nav = kwargs.get('Nav', self._linear_nav)
+        oroi = kwargs.get('roi', self._linear_roi)
 
-        if 'deg' in kwargs:
-            deg = kwargs['deg']
-        else:
-            deg = True
-
-        if 'Nav' in kwargs:
-            nav = kwargs['Nav']
-        else:
-            nav = self._linear_nav
-
-        if 'roi' in kwargs:
-            oroi = kwargs['roi']
-        else:
-            oroi = self._linear_roi
-
-        if 'delta' in kwargs:
-            delta = numpy.array(kwargs['delta'], dtype=numpy.double)
-            if delta.size != Ncirc:
-                raise InputError("QConversion: keyword argument delta does "
-                                 "not have an appropriate shape")
-        else:
-            delta = numpy.zeros(Ncirc)
-
-        if 'UB' in kwargs:
-            UB = numpy.array(kwargs['UB'])
-        else:
-            UB = self.UB
-
-        if 'sampledis' in kwargs:
-            sd = numpy.array(kwargs['sampledis'])
-        else:
-            sd = numpy.zeros(3)
         # prepare angular arrays from *args
         # need one sample angle and one detector angle array
         if len(args) != Ncirc:
@@ -830,35 +831,14 @@ class QConversion(object):
         sAngles = sAngles.transpose()
         dAngles = dAngles.transpose()
 
-        # initialize psd geometry to for C subprogram (include Nav and roi
-        # possibility)
-        cch = self._linear_cch / float(nav)
-        pwidth = self._linear_pixwidth * nav
-        # roi = numpy.ceil(numpy.array(roi)/float(nav)).astype(numpy.int32)
-        roi = numpy.array(oroi)
-        roi[0] = numpy.floor(oroi[0] / float(nav))
-        roi[1] = numpy.ceil((oroi[1] - oroi[0]) / float(nav)) + roi[0]
-        roi = roi.astype(numpy.int32)
-
+        cch, pwidth, roi = self._get_detparam_linear(oroi, nav)
         sAxis = self._sampleAxis_str
         dAxis = self._detectorAxis_str
 
-        if numpy.any(sd):
-            cfunc = cxrayutilities.ang2q_conversion_linear_sd
-            if self._has_translations:
-                cfunc = cxrayutilities.ang2q_conversion_linear_sdtrans
-            qpos = cfunc(
-                sAngles, dAngles, self.r_i, sAxis, dAxis, self._kappa_dir,
-                cch, pwidth, roi, self._linear_detdir, self._linear_tilt,
-                UB, sd, wl, config.NTHREADS)
-        else:
-            cfunc = cxrayutilities.ang2q_conversion_linear
-            if self._has_translations:
-                cfunc = cxrayutilities.ang2q_conversion_linear_trans
-            qpos = cfunc(
-                sAngles, dAngles, self.r_i, sAxis, dAxis, self._kappa_dir,
-                cch, pwidth, roi, self._linear_detdir, self._linear_tilt,
-                UB, wl, config.NTHREADS)
+        qpos = cxrayutilities.ang2q_conversion_linear(
+            sAngles, dAngles, self.r_i, sAxis, dAxis, self._kappa_dir,
+            cch, pwidth, roi, self._linear_detdir, self._linear_tilt,
+            UB, sd, wl, config.NTHREADS, flags)
 
         # reshape output
         if Npoints == 1:
@@ -879,42 +859,53 @@ class QConversion(object):
 
         Parameters
         ----------
-         detectorDir1:    direction of the detector (along the pixel
-                          direction 1); e.g. 'z+' means higher pixel numbers at
-                          larger z positions
-         detectorDir2:    direction of the detector (along the pixel
-                          direction 2); e.g. 'x+'
-         cch1,2:          center pixel, in direction of self.r_i at zero
-                          detectorAngles
-         Nch1:            number of detector pixels along direction 1
-         Nch2:            number of detector pixels along direction 2
-         distance:        distance of center pixel from center of rotation
-         pwidth1,2:       width of one pixel (same unit as distance)
-         chpdeg1,2:       channels per degree (only absolute value is relevant)
-                          sign determined through detectorDir1,2
-         detrot:          angle of the detector rotation around primary beam
-                          direction (used to correct misalignments)
-         tiltazimuth:     direction of the tilt vector in the detector plane
-                          (in degree)
-         tilt:            tilt of the detector plane around an axis normal to
-                          the direction given by the tiltazimuth
+        detectorDir1 :  str
+            direction of the detector (along the pixel direction 1); e.g. 'z+'
+            means higher pixel numbers at larger z positions
+        detectorDir2 :  str
+            direction of the detector (along the pixel direction 2); e.g. 'x+'
+        cch1, cch2 :    float
+            center pixel, in direction of self.r_i at zero detectorAngles
+        Nch1, Nch2 :    int
+            number of detector pixels along direction 1, 2
+        distance :      float, optional
+            distance of center pixel from center of rotation
+        pwidth1, pwidth2 : float, optional
+            width of one pixel (same unit as distance)
+        chpdeg1, chpdeg2 : float, optional
+            channels per degree (only absolute value is relevant) sign
+            determined through `detectorDir1, detectorDir2`
+        detrot :        float, optional
+            angle of the detector rotation around primary beam direction (used
+            to correct misalignments)
+        tiltazimuth :   float, optional
+            direction of the tilt vector in the detector plane (in degree)
+        tilt :          float, optional
+            tilt of the detector plane around an axis normal to the direction
+            given by the tiltazimuth
 
-           Note: Either distance and pwidth1,2 or chpdeg1,2 must be given !!
+        kwargs :        dict, optional
+            optional keyword arguments
+        Nav :           tuple or list, optional
+            number of channels to average to reduce data size (default: [1, 1])
+        roi :           tuple or list, optional
+            region of interest for the detector pixels; e.g.
+            [100, 900, 200, 800]
 
-           Note: the channel numbers run from 0 .. NchX-1
+            Note:
+                Either distance and pwidth1, pwidth2 or chpdeg1, chpdeg2 must
+                be given !!
 
-        **kwargs:         optional keyword arguments
-          Nav:            number of channels to average to reduce data size
-                          (default: [1, 1])
-          roi:            region of interest for the detector pixels; e.g.
-                          [100, 900, 200, 800]
+            Note:
+                the channel numbers run from 0 .. NchX-1
         """
 
         for k in kwargs.keys():
             if k not in ['Nav', 'roi']:
-                raise Exception("unknown keyword argument given: allowed are "
-                                "'Nav': number of channels for block-average, "
-                                "'roi': region of interest")
+                raise Exception("unknown keyword argument (%s) given: allowed "
+                                "are 'Nav': number of channels for "
+                                "block-average, 'roi': region of interest"
+                                % k)
 
         # detectorDir
         if not isinstance(detectorDir1, basestring) or len(detectorDir1) != 2:
@@ -972,19 +963,31 @@ class QConversion(object):
                              "were given -> read API doc")
 
         # kwargs
-        if 'roi' in kwargs:
-            self._area_roi = kwargs['roi']
-        else:
-            self._area_roi = [0, self._area_Nch1, 0, self._area_Nch2]
-        if 'Nav' in kwargs:
-            self._area_nav = kwargs['Nav']
-        else:
-            self._area_nav = [1, 1]
+        self._area_roi = kwargs.get('roi', [0, self._area_Nch1,
+                                            0, self._area_Nch2])
+        self._area_nav = kwargs.get('Nav', [1, 1])
 
         # rescale r_i
         self.r_i = math.VecUnit(self.r_i) * self._area_distance
 
         self._area_init = True
+
+    def _get_detparam_area(self, oroi, nav):
+        """
+        initialize CCD geomtry for C subroutines. This function considers the
+        Nav and roi options.
+        """
+        cch1 = self._area_cch1 / float(nav[0])
+        cch2 = self._area_cch2 / float(nav[1])
+        pwidth1 = self._area_pwidth1 * nav[0]
+        pwidth2 = self._area_pwidth2 * nav[1]
+        roi = numpy.array(oroi)
+        roi[0] = numpy.floor(oroi[0] / float(nav[0]))
+        roi[1] = numpy.ceil((oroi[1] - oroi[0]) / float(nav[0])) + roi[0]
+        roi[2] = numpy.floor(oroi[2] / float(nav[1]))
+        roi[3] = numpy.ceil((oroi[3] - oroi[2]) / float(nav[1])) + roi[2]
+        roi = roi.astype(numpy.int32)
+        return cch1, cch2, pwidth1, pwidth2, roi
 
     def area(self, *args, **kwargs):
         """
@@ -996,39 +999,48 @@ class QConversion(object):
 
         Parameters
         ----------
-        *args:          sample and detector angles as numpy array, lists or
-                        Scalars in total len(self.sampleAxis)+len(detectorAxis)
-                        must be given, always starting with the outer most
-                        circle.  all arguments must have the same shape or
-                        length but can be mixed with Scalars (i.e. if an angle
-                        is always the same it can be given only once instead of
-                        an array)
+        args :      ndarray, list or Scalars
+            sample and detector angles; in total `len(self.sampleAxis) +
+            len(detectorAxis)` must be given, always starting with the outer
+            most circle. all arguments must have the same shape or length but
+            can be mixed with Scalars (i.e. if an angle is always the same it
+            can be given only once instead of an array)
 
-            sAngles:    sample circle angles, number of arguments must
-                        correspond to len(self.sampleAxis)
-            dAngles:    detector circle angles, number of arguments must
-                        correspond to len(self.detectorAxis)
+             - sAngles :
+                sample circle angles, number of arguments must correspond to
+                len(self.sampleAxis)
+             - dAngles :
+                detector circle angles, number of arguments must correspond to
+                len(self.detectorAxis)
 
-        **kwargs:       possible keyword arguments
-            delta:      giving delta angles to correct the given ones for
-                        misalignment delta must be an numpy array or list of
-                        len(*args). Used angles are than *args - delta
-            UB:         matrix for conversion from (hkl) coordinates to Q of
-                        sample. Used to determine not Q but (hkl) (default:
-                        self.UB)
-            roi:        region of interest for the detector pixels; e.g.
-                        [100, 900, 200, 800] (default: self._area_roi)
-            Nav:        number of channels to average to reduce data size e.g.
-                        [2, 2] (default: self._area_nav)
-            wl:         x-ray wavelength in angstroem (default: self._wl)
-            en:         x-ray energy in eV (default is converted self._wl)
-                        both wavelength and energy can also be an array
-                        which enables the QConversion for energy scans.
-                        Note that the en keyword overrules the wl keyword!
-            deg:        flag to tell if angles are passed as degree (default:
-                        True)
-            sampledis:  sample displacement vector in same units as the
-                        detector distance (default: (0, 0, 0))
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list or array-like, optional
+            delta angles to correct the given ones for misalignment.
+            delta must be an numpy array or list of ``len(*args)``. used angles
+            are then ``*args - delta``
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: self.UB)
+        Nav :       tuple or list, optional
+            number of channels to average to reduce data size e.g.  [2, 2]
+            (default: self._area_nav)
+        roi :       list or tuple, optional
+            region of interest for the detector pixels; e.g.
+            [100, 900, 200, 800] (default: self._area_roi)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        en :        float, optional
+            x-ray energy in eV (default is converted self._wl). both wavelength
+            and energy can also be an array which enables the QConversion for
+            energy scans.  Note that the `en` keyword overrules the `wl`
+            keyword!
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+        sampledis : tuple or list or array-like
+            sample displacement vector in relative units of the detector
+            distance (default: (0, 0, 0))
+
 
         Returns
         -------
@@ -1054,52 +1066,13 @@ class QConversion(object):
                                 "'roi': region of interest, "
                                 "'sampledis': sample displacement vector")
 
-        Ns = len(self.sampleAxis)
-        Nd = len(self.detectorAxis)
-        if self._area_detrotaxis_set:
-            Nd = Nd - 1
-        Ncirc = Ns + Nd
+        Ns, Nd, Ncirc, wl, deg, delta, UB, sd, flags = \
+            self._parse_common_kwargs(**kwargs)
 
-        # kwargs
-        if 'wl' in kwargs:
-            wl = utilities.wavelength(kwargs['wl'])
-        else:
-            wl = self._wl
-        if 'en' in kwargs:
-            wl = utilities.lam2en(utilities.energy(kwargs['en']))
+        # extra keyword arguments
+        nav = kwargs.get('Nav', self._area_nav)
+        oroi = kwargs.get('roi', self._area_roi)
 
-        if 'deg' in kwargs:
-            deg = kwargs['deg']
-        else:
-            deg = True
-
-        if 'roi' in kwargs:
-            oroi = kwargs['roi']
-        else:
-            oroi = self._area_roi
-
-        if 'Nav' in kwargs:
-            nav = kwargs['Nav']
-        else:
-            nav = self._area_nav
-
-        if 'delta' in kwargs:
-            delta = numpy.array(kwargs['delta'], dtype=numpy.double)
-            if delta.size != Ncirc:
-                raise InputError("QConversion: keyword argument delta does "
-                                 "not have an appropriate shape")
-        else:
-            delta = numpy.zeros(Ncirc)
-
-        if 'UB' in kwargs:
-            UB = numpy.array(kwargs['UB'])
-        else:
-            UB = self.UB
-
-        if 'sampledis' in kwargs:
-            sd = numpy.array(kwargs['sampledis'])
-        else:
-            sd = numpy.zeros(3)
         # prepare angular arrays from *args
         # need one sample angle and one detector angle array
         if len(args) != Ncirc:
@@ -1135,44 +1108,21 @@ class QConversion(object):
         sAngles = sAngles.transpose()
         dAngles = dAngles.transpose()
 
-        # initialize ccd geometry to for C subroutine (include Nav and roi
-        # possibility)
-        cch1 = self._area_cch1 / float(nav[0])
-        cch2 = self._area_cch2 / float(nav[1])
-        pwidth1 = self._area_pwidth1 * nav[0]
-        pwidth2 = self._area_pwidth2 * nav[1]
-        roi = numpy.array(oroi)
-        roi[0] = numpy.floor(oroi[0] / float(nav[0]))
-        roi[1] = numpy.ceil((oroi[1] - oroi[0]) / float(nav[0])) + roi[0]
-        roi[2] = numpy.floor(oroi[2] / float(nav[1]))
-        roi[3] = numpy.ceil((oroi[3] - oroi[2]) / float(nav[1])) + roi[2]
-        roi = roi.astype(numpy.int32)
+        cch1, cch2, pwidth1, pwidth2, roi = self._get_detparam_area(oroi, nav)
+
         if config.VERBOSITY >= config.DEBUG:
             print("QConversion.area: roi, number of points per frame: %s, %d"
                   % (str(roi), (roi[1] - roi[0]) * (roi[3] - roi[2])))
-            print("QConversion.area: cch1,cch2: %5.2f %5.2f" % (cch1, cch2))
+            print("QConversion.area: cch1, cch2: %5.2f %5.2f" % (cch1, cch2))
 
         sAxis = self._sampleAxis_str
         dAxis = self._detectorAxis_str
 
-        if numpy.any(sd):
-            cfunc = cxrayutilities.ang2q_conversion_area_sd
-            if self._has_translations:
-                cfunc = cxrayutilities.ang2q_conversion_area_sdtrans
-            qpos = cfunc(
-                sAngles, dAngles, self.r_i, sAxis, dAxis, self._kappa_dir,
-                cch1, cch2, pwidth1, pwidth2, roi, self._area_detdir1,
-                self._area_detdir2, self._area_tiltazimuth, self._area_tilt,
-                UB, sd, wl, config.NTHREADS)
-        else:
-            cfunc = cxrayutilities.ang2q_conversion_area
-            if self._has_translations:
-                cfunc = cxrayutilities.ang2q_conversion_area_trans
-            qpos = cfunc(
-                sAngles, dAngles, self.r_i, sAxis, dAxis, self._kappa_dir,
-                cch1, cch2, pwidth1, pwidth2, roi, self._area_detdir1,
-                self._area_detdir2, self._area_tiltazimuth, self._area_tilt,
-                UB, wl, config.NTHREADS)
+        qpos = cxrayutilities.ang2q_conversion_area(
+            sAngles, dAngles, self.r_i, sAxis, dAxis, self._kappa_dir,
+            cch1, cch2, pwidth1, pwidth2, roi, self._area_detdir1,
+            self._area_detdir2, self._area_tiltazimuth, self._area_tilt,
+            UB, sd, wl, config.NTHREADS, flags)
 
         # reshape output
         if Npoints == 1:
@@ -1181,6 +1131,214 @@ class QConversion(object):
         else:
             qpos.shape = (Npoints, (roi[1] - roi[0]), (roi[3] - roi[2]), 3)
             return qpos[:, :, :, 0], qpos[:, :, :, 1], qpos[:, :, :, 2]
+
+    def transformSample2Lab(self, vector, *args):
+        """
+        transforms a vector from the sample coordinate frame to the laboratory
+        coordinate system by applying the sample rotations from inner to outer
+        circle.
+
+        Parameters
+        ----------
+        vector :    sequence, list or numpy array
+            vector to transform
+        args :      list
+            goniometer angles (sample angles or full goniometer angles can be
+            given. If more angles than the sample circles are given they will
+            be ignored)
+
+        Returns
+        -------
+        ndarray
+            rotated vector as numpy.array
+        """
+        rotvec = vector
+        for i in range(len(self.sampleAxis)-1, -1, -1):
+            a = args[i]
+            axis = self.sampleAxis[i]
+            rota = math.getVector(axis)
+            rotvec = math.rotarb(rotvec, rota, a)
+        return rotvec
+
+    def getDetectorPos(self, *args, **kwargs):
+        """
+        obtains the detector position vector by applying the detector arm
+        rotations.
+
+        Parameters
+        ----------
+        args :      list
+            detector angles. Only detector arm angles as described by the
+            detectorAxis attribute must be given.
+        kwargs :    dict, optional
+            optional keyword arguments
+        dim :       int, optional
+            dimension of the detector for which the position should be
+            determined
+        roi :       tuple or list, optional
+            region of interest for the detector pixels; (default:
+            self._area_roi/self._linear_roi)
+        Nav :       tuple or list, optional
+            number of channels to average to reduce data size; (default:
+            self._area_nav/self._linear_nav)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+
+        Returns
+        -------
+        ndarray
+            numpy array of length 3 with vector components of the detector
+            direction. The length of the vector is k.
+        """
+
+        for k in kwargs.keys():
+            if k not in ['dim', 'deg', 'Nav', 'roi']:
+                raise Exception("unknown keyword argument given: allowed are "
+                                "'dim': dimensionality of the detector"
+                                "'deg': True if angles are in degrees, "
+                                "'Nav': number of channels for block-average, "
+                                "'roi': region of interest, ")
+
+        dim = kwargs.get('dim', 0)
+
+        if dim == 1 and not self._linear_init:
+            raise Exception("QConversion: linear detector not initialized -> "
+                            "call Ang2Q.init_linear(...)")
+        elif dim == 2 and not self._area_init:
+            raise Exception("QConversion: area detector not initialized -> "
+                            "call Ang2Q.init_area(...)")
+
+        Ns = len(self.sampleAxis)
+        Nd = len(self.detectorAxis)
+        if self._area_detrotaxis_set:
+            Nd = Nd - 1
+        Ncirc = Ns + Nd
+
+        # kwargs
+        deg = kwargs.get('deg', True)
+
+        if 'roi' in kwargs:
+            oroi = kwargs['roi']
+        else:
+            if dim == 1:
+                oroi = self._linear_roi
+            elif dim == 2:
+                oroi = self._area_roi
+
+        if 'Nav' in kwargs:
+            nav = kwargs['Nav']
+        else:
+            if dim == 1:
+                nav = self._linear_nav
+            elif dim == 2:
+                nav = self._area_nav
+
+        # prepare angular arrays from *args
+        # need one sample angle and one detector angle array
+        if len(args) != Nd:
+            raise InputError("QConversion: wrong amount (%d) of arguments "
+                             "given, number of arguments should be %d"
+                             % (len(args), Nd))
+
+        # determine the number of points and reshape input arguments
+        Npoints = self._checkInput(*args)
+
+        if dim == 2 and self._area_detrotaxis_set:
+            Nd = Nd + 1
+            if deg:
+                a = args + (numpy.degrees(self._area_detrot),)
+            else:
+                a = args + (self._area_detrot,)
+            dAngles, retshape = self._reshapeInput(
+                Npoints, numpy.append(numpy.zeros(Nd), 0),
+                self.detectorAxis, *a, deg=deg)
+        else:
+            dAngles, retshape = self._reshapeInput(Npoints, numpy.zeros(Nd),
+                                                   self.detectorAxis, *args,
+                                                   deg=deg)
+
+        dAngles = dAngles.transpose()
+
+        if dim == 2:
+            cch1, cch2, pwidth1, pwidth2, roi = self._get_detparam_area(oroi,
+                                                                        nav)
+        elif dim == 1:
+            cch, pwidth, roi = self._get_detparam_linear(oroi, nav)
+
+        dAxis = self._detectorAxis_str
+
+        if dim == 2:
+            cfunc = cxrayutilities.ang2q_detpos_area
+            dpos = cfunc(dAngles, self.r_i, dAxis, cch1, cch2, pwidth1,
+                         pwidth2, roi, self._area_detdir1, self._area_detdir2,
+                         self._area_tiltazimuth, self._area_tilt,
+                         config.NTHREADS)
+
+            # reshape output
+            if Npoints == 1:
+                dpos.shape = ((roi[1] - roi[0]), (roi[3] - roi[2]), 3)
+                return dpos[:, :, 0], dpos[:, :, 1], dpos[:, :, 2]
+            else:
+                dpos.shape = (Npoints, (roi[1] - roi[0]), (roi[3] - roi[2]), 3)
+                return dpos[:, :, :, 0], dpos[:, :, :, 1], dpos[:, :, :, 2]
+
+        elif dim == 1:
+            cfunc = cxrayutilities.ang2q_detpos_linear
+            dpos = cfunc(dAngles, self.r_i, dAxis, cch, pwidth, roi,
+                         self._linear_detdir, self._linear_tilt,
+                         config.NTHREADS)
+
+            # reshape output
+            if Npoints == 1:
+                dpos.shape = (Npoints * (roi[1] - roi[0]), 3)
+                return dpos[:, 0], dpos[:, 1], dpos[:, 2]
+            else:
+                dpos.shape = (Npoints, (roi[1] - roi[0]), 3)
+                return dpos[:, :, 0], dpos[:, :, 1], dpos[:, :, 2]
+
+        else:
+            cfunc = cxrayutilities.ang2q_detpos
+            dpos = cfunc(dAngles, self.r_i, dAxis, config.NTHREADS)
+
+            if Npoints == 1:
+                return (dpos[0, 0], dpos[0, 1], dpos[0, 2])
+            else:
+                return numpy.reshape(dpos[:, 0], retshape), \
+                    numpy.reshape(dpos[:, 1], retshape), \
+                    numpy.reshape(dpos[:, 2], retshape)
+
+    def getDetectorDistance(self, *args, **kwargs):
+        """
+        obtains the detector distance by applying the detector arm movements.
+        This is especially interesting for the case of 1 or 2D detectors to
+        perform certain geometric corrections.
+
+        Parameters
+        ----------
+        args :      list
+            detector angles. Only detector arm angles as described by the
+            detectorAxis attribute must be given.
+        kwargs :    dict, optional
+            optional keyword arguments
+        dim :       int, optional
+            dimension of the detector for which the position should be
+            determined
+        roi :       tuple or list, optional
+            region of interest for the detector pixels; (default:
+            self._area_roi/self._linear_roi)
+        Nav :       tuple or list, optional
+            number of channels to average to reduce data size; (default:
+            self._area_nav/self._linear_nav)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+
+        Returns
+        -------
+        ndarray
+            numpy array with the detector distance
+        """
+        x, y, z = self.getDetectorPos(*args, **kwargs)
+        return numpy.sqrt(x**2 + y**2 + z**2)
 
 
 class Experiment(object):
@@ -1201,30 +1359,37 @@ class Experiment(object):
 
         Parameters
         ----------
-         ipdir:      inplane reference direction (ipdir points into the primary
-                     beam direction at zero angles)
-         ndir:       surface normal of your sample (ndir points in a direction
-                     perpendicular to the primary beam and the innermost
-                     detector rotation axis)
+        ipdir :     list or tuple or array-like
+            inplane reference direction (ipdir points into the primary beam
+            direction at zero angles)
+        ndir :      list or tuple or array-like
+            surface normal of your sample (ndir points in a direction
+            perpendicular to the primary beam and the innermost detector
+            rotation axis)
 
-        keyargs:     optional keyword arguments
-          qconv:     QConversion object to use for the Ang2Q conversion
-          sampleor:  sample orientation specifies the orientation of the sample
-                     surface with respect to the coordinate system in which the
-                     goniometer rotations are given. You can use the [xyz][+-]
-                     synthax to specify the nominal surface orientation (when
-                     all goniometer angles are zero). In addition two special
-                     values 'det' and 'sam' are available, which will let the
-                     code determine the orientation from either the inner
-                     most detector or sample rotation. Default is 'det'.
-          wl:        wavelength of the x-rays in Angstroem (default: 1.5406A)
-          en:        energy of the x-rays in eV (default: 8048eV == 1.5406A )
-                     the en keyword overrules the wl keyword
+        keyargs :   dict, optional
+            optional keyword arguments
+        qconv :     QConversion, optional
+            QConversion object to use for the Ang2Q conversion
+        sampleor :  {'det', 'sam', '[xyz][+-]'}, optional
+            sample orientation specifies the orientation of the sample surface
+            with respect to the coordinate system in which the goniometer
+            rotations are given. You can use the [xyz][+-] synthax to specify
+            the nominal surface orientation (when all goniometer angles are
+            zero). In addition two special values 'det' and 'sam' are
+            available, which will let the code determine the orientation from
+            either the inner most detector or sample rotation. Default is
+            'det'.
+        wl :        float or str
+            wavelength of the x-rays in Angstroem (default: 1.5406A)
+        en :        float or str
+            energy of the x-rays in eV (default: 8048eV == 1.5406A ).
+            the en keyword overrules the wl keyword
 
-        Note:
-         The qconv argument does not change the Q2Ang function's behavior. See
-         Q2AngFit function in case you want to calculate for arbitrary
-         goniometers with some restrictions.
+            Note:
+                The qconv argument does not change the Q2Ang function's
+                behavior. See Q2AngFit function in case you want to calculate
+                for arbitrary goniometers with some restrictions.
         """
 
         for k in keyargs.keys():
@@ -1235,16 +1400,12 @@ class Experiment(object):
                                 "'qconv': reciprocal space conversion, "
                                 "'sampleor': sample orientation")
 
-        if isinstance(ipdir, (list, tuple)):
-            self.idir = math.VecUnit(numpy.array(ipdir, dtype=numpy.double))
-        elif isinstance(ipdir, numpy.ndarray):
+        if isinstance(ipdir, (list, tuple, numpy.ndarray)):
             self.idir = math.VecUnit(ipdir)
         else:
             raise TypeError("Inplane direction must be list or numpy array")
 
-        if isinstance(ndir, (list, tuple)):
-            self.ndir = math.VecUnit(numpy.array(ndir, dtype=numpy.double))
-        elif isinstance(ndir, numpy.ndarray):
+        if isinstance(ndir, (list, tuple, numpy.ndarray)):
             self.ndir = math.VecUnit(ndir)
         else:
             raise TypeError("normal direction must be list or numpy array")
@@ -1266,17 +1427,11 @@ class Experiment(object):
                                              str, numpy.round(self.idir, 3)))))
 
         # initialize Ang2Q conversion
-        if "qconv" in keyargs:
-            self._A2QConversion = keyargs["qconv"]
-        else:
-            # 1S+1D goniometer
-            self._A2QConversion = QConversion('x+', 'x+', [0, 1, 0])
+        self._A2QConversion = keyargs.get(
+            'qconv', QConversion('x+', 'x+', [0, 1, 0]))
         self.Ang2Q = self._A2QConversion
 
-        if "sampleor" in keyargs:
-            self._sampleor = keyargs['sampleor']
-        else:
-            self._sampleor = 'det'
+        self._sampleor = keyargs.get('sampleor', 'det')
 
         # set the coordinate transform for the azimuth used in the experiment
         self.scatplane = math.VecUnit(numpy.cross(self.idir, self.ndir))
@@ -1284,11 +1439,7 @@ class Experiment(object):
                             self.ndir, self._sampleor)
 
         # calculate the energy from the wavelength
-        if "wl" in keyargs:
-            self._set_wavelength(keyargs["wl"])
-        else:
-            self._set_wavelength(config.WAVELENGTH)
-
+        self._set_wavelength(keyargs.get('wl', config.WAVELENGTH))
         if "en" in keyargs:
             self._set_energy(keyargs["en"])
 
@@ -1338,7 +1489,7 @@ class Experiment(object):
             yi = self._A2QConversion.r_i
             idc = self._A2QConversion.detectorAxis[-1]
             xi = math.getVector(idc)
-            if numpy.linalg.norm(numpy.cross(xi, yi)) < config.EPSILON:
+            if norm(numpy.cross(xi, yi)) < config.EPSILON:
                 # this is the case when a detector rotation around the primary
                 # beam direction is installed
                 idc = self._A2QConversion.detectorAxis[-2]
@@ -1359,7 +1510,7 @@ class Experiment(object):
             yi = self._A2QConversion.r_i
             try:
                 zi = math.getVector(sampleor)
-            except:
+            except InputError:
                 raise InputError('invalid value of sample orientation, use '
                                  'either [xyz][+-] syntax or det/sam!')
             if numpy.all(numpy.abs(yi) == numpy.abs(zi)):
@@ -1373,7 +1524,7 @@ class Experiment(object):
         self._t2 = math.CoordinateTransform(xi, yi, zi)
 
         self._transform = math.Transform(
-            numpy.dot(self._t2.imatrix, self._t1.matrix))
+            numpy.dot(numpy.linalg.inv(self._t2.matrix), self._t1.matrix))
 
     def _set_energy(self, energy):
         self._en = utilities.energy(energy)
@@ -1397,13 +1548,7 @@ class Experiment(object):
     wavelength = property(_get_wavelength, _set_wavelength)
 
     def _set_inplane_direction(self, dir):
-        if isinstance(dir, list):
-            self.idir = numpy.array(dir, dtype=numpy.double)
-        elif isinstance(dir, numpy.ndarray):
-            self.idir = dir
-        else:
-            raise TypeError("Inplane direction must be list or numpy array")
-
+        self.idir = math.VecUnit(dir)
         v1 = numpy.cross(self.ndir, self.idir)
         self._set_transform(v1, self.idir, self.ndir, self._sampleor)
 
@@ -1411,13 +1556,7 @@ class Experiment(object):
         return self.idir
 
     def _set_normal_direction(self, dir):
-        if isinstance(dir, list):
-            self.ndir = numpy.array(dir, dtype=numpy.double)
-        elif isinstance(dir, numpy.ndarray):
-            self.ndir = dir
-        else:
-            raise TypeError("Surface normal must be list or numpy array")
-
+        self.ndir = math.VecUnit(dir)
         v1 = numpy.cross(self.ndir, self.idir)
         self._set_transform(v1, self.idir, self.ndir, self._sampleor)
 
@@ -1429,40 +1568,48 @@ class Experiment(object):
 
     def Ang2HKL(self, *args, **kwargs):
         """
-        angular to (h,k,l) space conversion.
+        angular to (h, k, l) space conversion.
         It will set the UB argument to Ang2Q and pass all other parameters
         unchanged.  See Ang2Q for description of the rest of the arguments.
 
         Parameters
         ----------
-
-        **kwargs:       optional keyword arguments
-            B:          reciprocal space conversion matrix of a Material.  you
-                        can specify the matrix B (default identiy matrix) shape
-                        needs to be (3,3)
-            mat:        Material object to use to obtain a B matrix
-                        (e.g. xu.materials.Si) can be used as alternative to
-                        the B keyword argument B is favored in case both are
-                        given
-            U:          orientation matrix U can be given. If none is given the
-                        orientation defined in the Experiment class is used.
-            dettype:    detector type: one of ('point', 'linear', 'area')
-                        decides which routine of Ang2Q to call. default 'point'
-            delta:      giving delta angles to correct the given ones for
-                        misalignment. delta must be an numpy array or list of
-                        length 2. used angles are than om,tt - delta
-            wl:         x-ray wavelength in angstroem (default: self._wl)
-            en:         x-ray energy in eV (default: converted self._wl)
-            deg:        flag to tell if angles are passed as degree (default:
-                        True)
-            sampledis:  sample displacement vector in relative units of the
-                        detector distance (default: (0,0,0))
+        args :      list
+            arguments forwarded to Ang2Q
+        kwargs :    dict, optional
+            optional keyword arguments
+        B :         array-like, optional
+            reciprocal space conversion matrix of a Crystal. You can specify
+            the matrix B (default identiy matrix) shape needs to be (3, 3)
+        mat :       Crystal, optional
+            Crystal object to use to obtain a B matrix (e.g. xu.materials.Si)
+            can be used as alternative to the B keyword argument B is favored
+            in case both are given
+        U :         array-like, optional
+            orientation matrix U can be given. If none is given the orientation
+            defined in the Experiment class is used.
+        dettype :   {'point', 'linear', 'area'}, optional
+            detector type: decides which routine of Ang2Q to call. default
+            'point'
+        delta :     ndarray, list or tuple, optional
+            giving delta angles to correct the given ones for misalignment.
+            delta must be an numpy array or list of length 2. used angles are
+            than ``(om, tt) - delta``
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        en :        float or str, optional
+            x-ray energy in eV (default: converted self._wl)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
+        sampledis : tuple, list or array-like, optional
+            sample displacement vector in relative units of the detector
+            distance (default: (0, 0, 0))
 
         Returns
         -------
-        H K L coordinates as numpy.ndarray with shape ( * , 3 )
-        where * corresponds to the number of points given in the input (*args)
-
+        ndarray
+            H K L coordinates as numpy.ndarray with shape `(N , 3)` where `N`
+            corresponds to the number of points given in the input (args)
         """
 
         for k in kwargs.keys():
@@ -1473,7 +1620,7 @@ class Experiment(object):
                                 "'U': orientation matrix, "
                                 "'mat': material object, "
                                 "'dettype': string with detector type, "
-                                "'delta,wl,en,deg,sampledis' from Ang2Q")
+                                "'delta, wl, en, deg, sampledis' from Ang2Q")
 
         if "B" in kwargs:
             B = numpy.array(kwargs['B'])
@@ -1517,8 +1664,8 @@ class Experiment(object):
 
         Parameters
         ----------
-         v:     object to transform, list or numpy array of shape
-                    (n,) (n,n), (n,n,n,n) where n is the rank of the
+        v :     object to transform, list or numpy array of shape
+                    (n,) (n, n), (n, n, n, n) where n is the rank of the
                     transformation matrix
 
         Returns
@@ -1529,15 +1676,15 @@ class Experiment(object):
 
     def TiltAngle(self, q, deg=True):
         """
-        TiltAngle(q,deg=True):
+        TiltAngle(q, deg=True):
         Return the angle between a q-space position and the surface normal.
 
         Parameters
         ----------
-         q:          list or numpy array with the reciprocal space position
+        q :          list or numpy array with the reciprocal space position
 
         optional keyword arguments:
-         deg:        True/False whether the return value should be in degree or
+        deg :        True/False whether the return value should be in degree or
                      radians (default: True)
         """
 
@@ -1550,6 +1697,25 @@ class Experiment(object):
 
         return math.VecAngle(self.ndir, qt, deg)
 
+    def _prepare_qvec(self, Q):
+        """
+        check and reshape input to have the same q array for all possible types
+        of input
+        """
+        if len(Q) < 3:
+            Q = Q[0]
+            if len(Q) < 3:
+                raise InputError("need 3 q-space vector components")
+
+        if isinstance(Q, (list, tuple, numpy.ndarray)):
+            q = numpy.asarray(Q, dtype=numpy.double)
+        else:
+            raise TypeError("Q vector must be a list, tuple or numpy array")
+
+        if len(q.shape) != 2:
+            q = q.reshape(3, -1)
+        return q.T
+
 
 class HXRD(Experiment):
 
@@ -1558,7 +1724,7 @@ class HXRD(Experiment):
     the class helps with calculating the angles of Bragg reflections
     as well as helps with analyzing measured data
 
-    the class describes a two circle (omega,twotheta) goniometer to
+    the class describes a two circle (omega, twotheta) goniometer to
     help with coplanar x-ray diffraction experiments. Nevertheless 3D data
     can be treated with the use of linear and area detectors.
     see help self.Ang2Q
@@ -1570,15 +1736,17 @@ class HXRD(Experiment):
 
         Parameters
         ----------
-        same as for the Experiment base class -> please look at the docstring
-        of Experiment.__init__ for more details
-        +
-        keyargs         additional optional keyword argument
-          geometry:     determines the scattering geometry:
-                        "hi_lo" (default) high incidence-low exit
-                        "lo_hi" low incidence - high exit
-                        "real" general geometry - q-coordinates determine
-                               high or low incidence
+        idir, ndir, keyargs :
+            same as for the Experiment base class -> please look at the
+            docstring of Experiment.__init__ for more details
+        geometry :      {'hi_lo', 'lo_hi', 'real'}, optional
+            determines the scattering geometry :
+
+                - 'hi_lo' (default) high incidence-low exit
+                - 'lo_hi' low incidence - high exit
+                - 'real' general geometry - q-coordinates determine
+                  high or low incidence
+
         """
         if "qconv" not in keyargs:
             keyargs['qconv'] = QConversion('x+', 'x+', [0, 1, 0])
@@ -1604,27 +1772,31 @@ class HXRD(Experiment):
 
         Parameters
         ----------
-         om,tt:      sample and detector angles as numpy array, lists or
-                     Scalars must be given. All arguments must have the same
-                     shape or length. However, if one angle is always the same
-                     its enough to give one scalar value.
+        om, tt :    float or array-like
+            sample and detector angles as numpy array, lists or Scalars must be
+            given. All arguments must have the same shape or length. However,
+            if one angle is always the same its enough to give one scalar
+            value.
 
-        **kwargs:    optional keyword arguments
-             delta:  giving delta angles to correct the given ones for
-                     misalignment. delta must be an numpy array or list of
-                     length 2. Used angles are than om,tt - delta
-             UB:     matrix for conversion from (hkl) coordinates to Q of
-                     sample used to determine not Q but (hkl)
-                     (default: identity matrix)
-             wl:     x-ray wavelength in angstroem (default: self._wl)
-             deg:    flag to tell if angles are passed as degree (default:
-                     True)
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list or array-like
+            giving delta angles to correct the given ones for misalignment.
+            delta must be an numpy array or list of length 2. Used angles are
+            than om, tt - delta
+        UB :        array-like
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: identity matrix)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
 
         Returns
         -------
-        reciprocal space positions as numpy.ndarray with shape ( * , 3 )
-        where * corresponds to the number of points given in the input
-
+        ndarray
+            reciprocal space positions as numpy.ndarray with shape `(N , 3)`
+            where `N` corresponds to the number of points given in the input
         """
         # dummy function to have some documentation string available
         # the real function is generated dynamically in the __init__ routine
@@ -1636,64 +1808,71 @@ class HXRD(Experiment):
         keyword argument trans determines whether Q should be transformed to
         the experimental coordinate frame or not. The coplanar scattering
         angles correspond to a goniometer with sample rotations
-        ['x+','y+','z-'] and detector rotation 'x+' and primary beam along y.
+        ['x+', 'y+', 'z-'] and detector rotation 'x+' and primary beam along y.
         This is a standard four circle diffractometer.
+
+        Note:
+            The behavior of this function is unchanged if the goniometer
+            definition is changed!
 
         Parameters
         ----------
-         Q:          a list, tuple or numpy array of shape (3) with
-                     q-space vector components
-                     or 3 separate lists with qx,qy,qz
+        Q :         list, tuple or array-like
+            array of shape (3) with q-space vector components or 3
+            separate lists with qx, qy, qz
 
-        optional keyword arguments:
-         trans:      True/False apply coordinate transformation on Q (default
-                     True)
-         deg:        True/Flase (default True) determines if the
-                     angles are returned in radians or degrees
-         geometry:   determines the scattering geometry:
+        trans :     bool, optional
+            apply coordinate transformation on Q (default True)
+        deg :       book, optional
+            (default True) determines if the angles are returned in radians or
+            degrees
+        geometry :  {'hi_lo', 'lo_hi', 'real'}, optional
+            determines the scattering geometry (default: self.geometry):
 
-                     - "hi_lo" high incidence and low exit
-                     - "lo_hi" low incidence and high exit
-                     - "real" general geometry with angles determined by
-                       q-coordinates (azimuth); this and upper geometries
-                       return [omega,0,phi,twotheta]
-                     - "realTilt" general geometry with angles determined by
-                       q-coordinates (tilt); returns [omega,chi,phi,twotheta]
+             - 'hi_lo' high incidence and low exit
+             - 'lo_hi' low incidence and high exit
+             - 'real' general geometry with angles determined by
+               q-coordinates (azimuth); this and upper geometries
+               return [omega, 0, phi, twotheta]
+             - 'realTilt' general geometry with angles determined by
+               q-coordinates (tilt); returns [omega, chi, phi, twotheta]
 
-                     default: self.geometry
-
-         refrac:     boolean to determine if refraction is taken into account
-                     default: False
-                     if True then also a material must be given
-         mat:        Material object; needed to obtain its optical properties
-                     for refraction correction, otherwise not used
-         full_output:boolean to determine if additional output is given to
-                     determine scattering angles more accurately in case
-                     refraction is set to True. default: False
-         fi,fd:      if refraction correction is applied one can optionally
-                     specify the facet through which the beam enters (fi) and
-                     exits (fd) fi, fd must be the surface normal vectors (not
-                     transformed & not necessarily normalized). If omitted the
-                     normal direction of the experiment is used.
+        refrac :    bool, optional
+            determines if refraction is taken into account;
+            if True then also a material must be given (default: False)
+        mat :       Crystal
+            Crystal object; needed to obtain its optical properties for
+            refraction correction, otherwise not used
+        full_output : bool, optional
+            determines if additional output is given to determine scattering
+            angles more accurately in case refraction is set to True. default:
+            False
+        fi, fd :    tuple or list
+            if refraction correction is applied one can optionally specify the
+            facet through which the beam enters (fi) and exits (fd) fi, fd must
+            be the surface normal vectors (not transformed & not necessarily
+            normalized). If omitted the normal direction of the experiment is
+            used.
 
         Returns
         -------
-        a numpy array of shape (4) with four scattering angles which are
-        [omega,chi,phi,twotheta]
+        ndarray
+            **full_output=False**: a numpy array of shape (4) with four
+            scattering angles which are [omega, chi, phi, twotheta];
 
-         omega:      incidence angle with respect to surface
-         chi:        sample tilt for the case of non-coplanar geometry
-         phi:        sample azimuth with respect to inplane reference direction
-         twotheta:   scattering angle/detector angle
+             - omega :      incidence angle with respect to surface
+             - chi :        sample tilt for the case of non-coplanar geometry
+             - phi :        sample azimuth with respect to inplane reference
+                            direction
+             - twotheta :   scattering angle/detector angle
 
-        if full_output:
-        a numpy array of shape (6) with five angles which are
-        [omega,chi,phi,twotheta,psi_i,psi_d]
+            **full_output=True**: a numpy array of shape (6) with five angles
+            which are [omega, chi, phi, twotheta, psi_i, psi_d]
 
-         psi_i: offset of the incidence beam from the scattering plane due to
-                refraction
-         pdi_d: offset ot the diffracted beam from the scattering plane due to
-                refraction
+             - psi_i : offset of the incidence beam from the scattering plane
+                       due to refraction
+             - pdi_d : offset ot the diffracted beam from the scattering plane
+                       due to refraction
         """
 
         for k in keyargs.keys():
@@ -1704,74 +1883,28 @@ class HXRD(Experiment):
                                 "'fi', 'fd', 'full_output'; "
                                 "see documentation for details")
 
-        # collect the q-space input
-        if len(Q) < 3:
-            Q = Q[0]
-            if len(Q) < 3:
-                raise InputError("need 3 q-space vector components")
-
-        if isinstance(Q, (list, tuple)):
-            q = numpy.array(Q, dtype=numpy.double)
-        elif isinstance(Q, numpy.ndarray):
-            q = Q
-        else:
-            raise TypeError("Q vector must be a list, tuple or numpy array")
-
-        # reshape input to have the same q array for all possible
-        # types of different input
-        if len(q.shape) != 2:
-            q = q.reshape(3, 1)
+        q = self._prepare_qvec(Q)
 
         # parse keyword arguments
-        if 'geometry' in keyargs:
-            if keyargs['geometry'] in ["hi_lo", "lo_hi", "real", "realTilt"]:
-                geom = keyargs['geometry']
-            else:
-                raise InputError("HXRD: invalid value for the geometry "
-                                 "argument given\n valid entries are: hi_lo, "
-                                 "lo_hi, real, realTilt")
-        else:
-            geom = self.geometry
+        geom = keyargs.get('geometry', self.geometry)
+        if geom not in ["hi_lo", "lo_hi", "real", "realTilt"]:
+            raise InputError("HXRD: invalid value for the geometry argument "
+                             "given\n valid entries are: hi_lo, lo_hi, real, "
+                             "realTilt")
+        trans = keyargs.get('trans', True)
+        deg = keyargs.get('deg', True)
+        mat = keyargs.get('mat', None)  # material for optical properties
 
-        if 'trans' in keyargs:
-            trans = keyargs['trans']
-        else:
-            trans = True
+        refrac = keyargs.get('refrac', False)
+        if refrac and mat is None:  # check if material is available
+            raise InputError("keyword argument 'mat' must be set when "
+                             "'refrac' is set to True!")
 
-        if 'deg' in keyargs:
-            deg = keyargs['deg']
-        else:
-            deg = True
-
-        if 'mat' in keyargs:  # material for optical properties
-            mat = keyargs['mat']
-        else:
-            mat = None
-
-        if 'refrac' in keyargs:
-            refrac = keyargs['refrac']
-            if refrac:  # check if material is available
-                if mat is None:
-                    raise InputError("keyword argument 'mat' must be set when "
-                                     "'refrac' is set to True!")
-        else:
-            refrac = False
-
-        if 'full_output' in keyargs:
-            foutp = keyargs['full_output']
-        else:
-            foutp = False
-
-        if 'fi' in keyargs:  # incidence facet
-            fi = keyargs['fi']
-        else:
-            fi = self.ndir
+        foutp = keyargs.get('full_output', False)
+        fi = keyargs.get('fi', self.ndir)  # incidence facet
         fi = math.VecUnit(self.Transform(fi))
 
-        if 'fd' in keyargs:  # exit facet
-            fd = keyargs['fd']
-        else:
-            fd = self.ndir
+        fd = keyargs.get('fd', self.ndir)  # exit facet
         fd = math.VecUnit(self.Transform(fd))
 
         # set parameters for the calculation
@@ -1788,140 +1921,167 @@ class HXRD(Experiment):
 
         # start calculation for each given Q-point
         if foutp:
-            angle = numpy.zeros((6, q.shape[1]))
+            angle = numpy.zeros((6, q.shape[0]))
         else:
-            angle = numpy.zeros((4, q.shape[1]))
-        for i in range(q.shape[1]):
-            qvec = q[:, i]
+            angle = numpy.zeros((4, q.shape[0]))
 
-            if trans:
-                qvec = self.Transform(qvec)
+        if trans:
+            q = self.Transform(q)
 
-            if config.VERBOSITY >= config.INFO_ALL:
-                print("XU.HXRD.Q2Ang: qvec= %s" % repr(qvec))
+        if config.VERBOSITY >= config.DEBUG:
+            print("XU.HXRD.Q2Ang: q= %s" % repr(q))
 
-            qa = math.VecNorm(qvec)
-            tth = 2. * numpy.arcsin(qa / 2. / k)
+        qa = math.VecNorm(q)
+        tth = 2. * numpy.arcsin(qa / 2. / k)
 
-            # calculation of the sample azimuth phi (scattering plane
-            # spanned by qvec[1] and qvec[2] directions)
+        # calculation of the sample azimuth phi (scattering plane
+        # spanned by qvec[1] and qvec[2] directions)
 
-            chi = -numpy.arctan2(math.VecDot(x, qvec),
-                                 math.VecDot(z, qvec))
-            if numpy.abs(math.VecDot(z, qvec)) < config.EPSILON:
-                if config.VERBOSITY >= config.INFO_LOW:
-                    print("XU.HXRD: Given peak is perpendicular to ndir-"
-                          "reference direction (might be inplane or "
-                          "unreachable)")
+        chi = -numpy.arctan2(math.VecDot(q, x), math.VecDot(q, z))
+        if numpy.any(numpy.abs(math.VecDot(q, z)) < config.EPSILON):
+            if config.VERBOSITY >= config.INFO_LOW:
+                print("XU.HXRD: some position is perpendicular to ndir-"
+                      "reference direction (might be inplane or "
+                      "unreachable)")
 
-            if geom == 'hi_lo':
-                # +: high incidence geometry
-                om = tth / 2. + math.VecAngle(z, qvec)
-                phi = -numpy.arctan2(
-                    math.VecDot(x, qvec),
-                    math.VecDot(y, qvec))
-            elif geom == 'lo_hi':
-                # -: low incidence geometry
-                om = tth / 2. - math.VecAngle(z, qvec)
-                phi = -numpy.arctan2(
-                    -1 * math.VecDot(x, qvec),
-                    -1 * math.VecDot(y, qvec))
-            elif geom == 'real':
-                phi = -numpy.arctan2(
-                    math.VecDot(x, qvec),
-                    math.VecDot(y, qvec))
-                if numpy.abs(phi) <= numpy.pi / 2.:
-                    sign = +1.
-                    phi = -numpy.arctan2(
-                        math.VecDot(x, qvec),
-                        math.VecDot(y, qvec))
-                else:
-                    sign = -1.
-                    phi = -numpy.arctan2(
-                        -1 * math.VecDot(x, qvec),
-                        -1 * math.VecDot(y, qvec))
-                om = tth / 2 + sign * math.VecAngle(z, qvec)
-            elif geom == 'realTilt':
-                phi = 0.
-                om = tth / 2 + numpy.arctan2(
-                    math.VecDot(y, qvec),
-                    numpy.sqrt(math.VecDot(z, qvec) ** 2 +
-                               math.VecDot(x, qvec) ** 2))
+        if geom == 'hi_lo':
+            # +: high incidence geometry
+            om = tth / 2. + math.VecAngle(q, z)
+            phi = -numpy.arctan2(math.VecDot(q, x), math.VecDot(q, y))
+        elif geom == 'lo_hi':
+            # -: low incidence geometry
+            om = tth / 2. - math.VecAngle(q, z)
+            phi = -numpy.arctan2(-1 * math.VecDot(q, x),
+                                 -1 * math.VecDot(q, y))
+        elif geom == 'real':
+            phi = -numpy.arctan2(math.VecDot(q, x), math.VecDot(q, y))
+            sign = numpy.ones(q.shape[0])
+            m = numpy.abs(phi) > numpy.pi / 2.
+            phi = -numpy.arctan2(math.VecDot(q, x), math.VecDot(q, y))
+            sign[m] = -1
+            phi[m] = -numpy.arctan2(-1 * math.VecDot(q, x),
+                                    -1 * math.VecDot(q, y))
+            om = tth / 2 + sign * math.VecAngle(q, z)
+        elif geom == 'realTilt':
+            phi = 0.
+            om = tth / 2 + numpy.arctan2(
+                math.VecDot(q, y),
+                numpy.sqrt(math.VecDot(q, z) ** 2 + math.VecDot(q, x) ** 2))
 
-            # refraction correction at incidence and exit facet
-            psi_i = 0.
-            psi_d = 0.  # needed if refrac is false and full_output
-            if refrac:
-                beta = tth - om
-                if config.VERBOSITY >= config.DEBUG:
-                    print("XU.HXRD.Q2Ang: considering refraction "
-                          "correction for omega, beta: %.3f %.3f"
-                          % (om, beta))
+        # refraction correction at incidence and exit facet
+        psi_i = numpy.zeros_like(tth)
+        psi_d = numpy.zeros_like(tth)  # if refrac is false and full_output
+        if refrac:
+            beta = tth - om
 
-                ki = k * (numpy.cos(om) * y - numpy.sin(om) * z)
-                kd = k * (numpy.cos(beta) * y + numpy.sin(beta) * z)
+            ki = k * (numpy.cos(om)[:, numpy.newaxis] * y[numpy.newaxis, :] -
+                      numpy.sin(om)[:, numpy.newaxis] * z[numpy.newaxis, :])
+            kd = k * (numpy.cos(beta)[:, numpy.newaxis] * y[numpy.newaxis, :] +
+                      numpy.sin(beta)[:, numpy.newaxis] * z[numpy.newaxis, :])
 
-                # refraction at incidence facet
-                if numpy.dot(fi, ki) > 0:
-                    print("XU.HXRD: Warning, incidence facet not hit by "
-                          "primary beam! check your input!")
-                    om = numpy.nan
-                    tth = numpy.nan
-                else:
-                    cosbi = numpy.abs(numpy.dot(fi, ki) / norm(ki))
-                    cosb0 = numpy.sqrt(1 - n ** 2 * (1 - cosbi ** 2))
+            # refraction at incidence facet
+            m = math.VecDot(ki, fi) > 0
+            if numpy.any(m):
+                print("XU.HXRD: Warning, incidence facet not hit by "
+                      "primary beam for all positions! check your input!")
+                om[m] = numpy.nan
+                tth[m] = numpy.nan
+            mnot = numpy.logical_not(m)
+            cosbi = numpy.abs(math.VecDot(ki, fi) / math.VecNorm(ki))
+            cosb0 = numpy.sqrt(1 - n ** 2 * (1 - cosbi ** 2))
 
-                    ki0 = self.k0 * (n * ki / norm(ki) -
-                                     numpy.sign(numpy.dot(fi, ki)) *
-                                     (n * cosbi - cosb0) * fi)
-                    om = math.VecAngle(y, ki0)
-                    psi_i = numpy.arcsin(numpy.dot(ki0, x) / self.k0)
-                    tth = -1
-                    if config.VERBOSITY >= config.DEBUG:
-                        print("XU.HXRD.Q2Ang: ki,ki0 = %s %s"
-                              % (repr(ki), repr(ki0)))
+            ki0 = self.k0 * (n * math.VecUnit(ki) -
+                             (numpy.sign(math.VecDot(ki, fi)) *
+                             (n * cosbi - cosb0))[:, numpy.newaxis] *
+                             fi[numpy.newaxis, :])
+            om[mnot] = math.VecAngle(ki0, y)
+            psi_i[mnot] = numpy.arcsin(math.VecDot(ki0, x) / self.k0)
+            if config.VERBOSITY >= config.DEBUG:
+                print("XU.HXRD.Q2Ang: ki, ki0 = %s %s"
+                      % (repr(ki), repr(ki0)))
 
-                # refraction at exit facet
-                if numpy.dot(fd, kd) < 0:
-                    print("XU.HXRD: Warning, exit facet not hit by "
-                          "diffracted beam! check your input!")
-                    om = numpy.nan
-                    tth = numpy.nan
-                elif tth == -1:
-                    cosbd = numpy.abs(numpy.dot(fd, kd) / norm(kd))
-                    cosb0 = numpy.sqrt(1 - n ** 2 * (1 - cosbd ** 2))
+            # refraction at exit facet
+            m = math.VecDot(kd, fd) < 0
+            if numpy.any(m):
+                print("XU.HXRD: Warning, exit facet not hit by "
+                      "diffracted beam! check your input!")
+                om[m] = numpy.nan
+                tth[m] = numpy.nan
 
-                    kd0 = self.k0 * (n * kd / norm(kd) -
-                                     numpy.sign(numpy.dot(fd, kd)) *
-                                     (n * cosbd - cosb0) * fd)
-                    tth = math.VecAngle(ki0, kd0)
-                    psi_d = numpy.arcsin(numpy.dot(kd0, x) / self.k0)
-                    if config.VERBOSITY >= config.DEBUG:
-                        print("XU.HXRD.Q2Ang: kd,kd0 = %s %s"
-                              % (repr(kd), repr(kd0)))
+            cosbd = numpy.abs(math.VecDot(kd, fd) / math.VecNorm(kd))
+            cosb0 = numpy.sqrt(1 - n ** 2 * (1 - cosbd ** 2))
 
-            if geom == 'realTilt':
-                angle[0, i] = om
-                angle[1, i] = chi
-                angle[3, i] = tth
-            else:
-                angle[0, i] = om
-                angle[2, i] = phi
-                angle[3, i] = tth
-            if foutp:
-                angle[4, i] = psi_i
-                angle[5, i] = psi_d
+            kd0 = self.k0 * (n * math.VecUnit(kd) -
+                             (numpy.sign(math.VecDot(kd, fd)) *
+                             (n * cosbd - cosb0))[:, numpy.newaxis] *
+                             fd[numpy.newaxis, :])
+            tth[mnot] = math.VecAngle(ki0, kd0)
+            psi_d[mnot] = numpy.arcsin(numpy.dot(kd0, x) / self.k0)
+            if config.VERBOSITY >= config.DEBUG:
+                print("XU.HXRD.Q2Ang: kd, kd0 = %s %s"
+                      % (repr(kd), repr(kd0)))
 
-        if q.shape[1] == 1:
+        if geom == 'realTilt':
+            angle[0, :] = om
+            angle[1, :] = chi
+            angle[3, :] = tth
+        else:
+            angle[0, :] = om
+            angle[2, :] = phi
+            angle[3, :] = tth
+        if foutp:
+            angle[4, :] = psi_i
+            angle[5, :] = psi_d
+
+        if q.shape[0] == 1:
             angle = angle.flatten()
             if config.VERBOSITY >= config.INFO_ALL:
-                print("XU.HXRD.Q2Ang: om,chi,phi,tth,[psi_i,psi_d] = %s"
+                print("XU.HXRD.Q2Ang: om, chi, phi, tth,[psi_i, psi_d] = %s"
                       % repr(angle))
 
         if deg:
             return numpy.degrees(angle)
         else:
             return angle
+
+
+class FourC(HXRD):
+
+    """
+    class describing high angle x-ray diffraction experiments
+    the class helps with calculating the angles of Bragg reflections
+    as well as helps with analyzing measured data
+
+    the class describes a four circle (omega, chi, phi, twotheta) goniometer to
+    help with coplanar x-ray diffraction experiments. Nevertheless 3D data can
+    be treated with the use of linear and area detectors.  see help self.Ang2Q
+    """
+
+    def __init__(self, idir, ndir, **keyargs):
+        """
+        initialization routine for the FourC Experiment class
+
+        Parameters
+        ----------
+        idir, ndir, keyargs :
+            same as for the Experiment base class -> please look at the
+            docstring of Experiment.__init__ for more details
+        geometry :      {'hi_lo', 'lo_hi', 'real'}, optional
+            determines the scattering geometry :
+
+                - 'hi_lo' (default) high incidence-low exit
+                - 'lo_hi' low incidence - high exit
+                - 'real' general geometry - q-coordinates determine
+                  high or low incidence
+
+        """
+        if "qconv" not in keyargs:
+            # 3S+1D goniometer (standard four-circle goniometer,
+            # omega, chi, phi, theta)
+            keyargs['qconv'] = QConversion(['x+', 'y+', 'z-'],
+                                           'x+', [0, 1, 0])
+
+        HXRD.__init__(self, idir, ndir, **keyargs)
 
 
 class NonCOP(Experiment):
@@ -1933,9 +2093,9 @@ class NonCOP(Experiment):
     used to align asymmetric peaks, like in the case of a polefigure
     measurement.
 
-    The class describes a four circle (omega,twotheta) goniometer to help with
-    x-ray diffraction experiments. Linear and area detectors can be treated as
-    described in "help self.Ang2Q"
+    The class describes a four circle (omega, chi, phi, twotheta) goniometer to
+    help with x-ray diffraction experiments. Linear and area detectors can be
+    treated as described in "help self.Ang2Q"
     """
 
     def __init__(self, idir, ndir, **keyargs):
@@ -1944,12 +2104,12 @@ class NonCOP(Experiment):
 
         Parameters
         ----------
-        same as for the Experiment base class
-
+        idir, ndir, keyargs :
+            same as for the Experiment base class
         """
         if "qconv" not in keyargs:
             # 3S+1D goniometer (standard four-circle goniometer,
-            # omega,chi,phi,theta)
+            # omega, chi, phi, theta)
             keyargs['qconv'] = QConversion(['x+', 'y+', 'z-'],
                                            'x+', [0, 1, 0])
 
@@ -1962,26 +2122,31 @@ class NonCOP(Experiment):
 
         Parameters
         ----------
-         om,chi,phi,tt: sample and detector angles as numpy array, lists or
-                        Scalars must be given. All arguments must have the same
-                        shape or length. However, if one angle is always the
-                        same its enough to give one scalar value.
+        om, chi, phi, tt : float or array-like
+            sample and detector angles as numpy array, lists or Scalars must be
+            given. All arguments must have the same shape or length. However,
+            if one angle is always the same its enough to give one scalar
+            value.
 
-        **kwargs:   optional keyword arguments
-            delta:  giving delta angles to correct the given ones for
-                    misalignment delta must be an numpy array or list of
-                    length 4. Used angles are than om,chi,phi,tt - delta
-            UB:     matrix for conversion from (hkl) coordinates to Q of sample
-                    used to determine not Q but (hkl)
-                    (default: identity matrix)
-            wl:     x-ray wavelength in angstroem (default: self._wl)
-            deg:    flag to tell if angles are passed as degree (default: True)
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list, tuple or array-like, optional
+            giving delta angles to correct the given ones for misalignment
+            delta must be an numpy array or list of length 4. Used angles are
+            than om, chi, phi, tt - delta
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: identity matrix)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
 
         Returns
         -------
-        reciprocal space positions as numpy.ndarray with shape ( * , 3 )
-        where * corresponds to the number of points given in the input
-
+        ndarray
+            reciprocal space positions as numpy.ndarray with shape `(N , 3)`
+            where `N` corresponds to the number of points given in the input
         """
         # dummy function to have some documentation string available
         # the real function is generated dynamically in the __init__ routine
@@ -1993,27 +2158,33 @@ class NonCOP(Experiment):
         The keyword argument trans determines whether Q should be transformed
         to the experimental coordinate frame or not.
 
+        Note:
+            The behavior of this function is unchanged if the goniometer
+            definition is changed!
+
         Parameters
         ----------
-         Q:          a list, tuple or numpy array of shape (3) with
-                     q-space vector components
-                     or 3 separate lists with qx,qy,qz
+        Q :         list, tuple or array-like
+            array of shape (3) with q-space vector components or 3
+            separate lists with qx, qy, qz
 
-        optional keyword arguments:
-         trans:      True/False apply coordinate transformation on Q
-                     (default True)
-         deg:        True/Flase (default True) determines if the
-                     angles are returned in radians or degree
+        trans :     bool, optional
+            apply coordinate transformation on Q (default True)
+        deg :       book, optional
+            (default True) determines if the angles are returned in radians or
+            degrees
 
         Returns
         -------
-        a numpy array of shape (4) with four scattering angles which are
-        [omega, chi, phi, twotheta]
+        ndarray
+            a numpy array of shape (4) with four scattering
+            angles which are [omega, chi, phi, twotheta];
 
-         omega:      sample rocking angle
-         chi:        sample tilt
-         phi:        sample azimuth
-         twotheta:   scattering angle (detector)
+             - omega :      incidence angle with respect to surface
+             - chi :        sample tilt for the case of non-coplanar geometry
+             - phi :        sample azimuth with respect to inplane reference
+                            direction
+             - twotheta :   scattering angle/detector angle
         """
 
         for k in keyargs.keys():
@@ -2022,70 +2193,44 @@ class NonCOP(Experiment):
                                 "'trans': coordinate transformation flag, "
                                 "'deg': degree-flag")
 
-        # collect the q-space input
-        if len(Q) < 3:
-            Q = Q[0]
-            if len(Q) < 3:
-                raise InputError("need 3 q-space vector components")
+        q = self._prepare_qvec(Q)
 
-        if isinstance(Q, (list, tuple)):
-            q = numpy.array(Q, dtype=numpy.double)
-        elif isinstance(Q, numpy.ndarray):
-            q = Q
-        else:
-            raise TypeError("Q vector must be a list, tuple or numpy array")
+        trans = keyargs.get('trans', True)
+        deg = keyargs.get('deg', True)
 
-        # reshape input to have the same q array for all possible
-        # types of different input
-        if len(q.shape) != 2:
-            q = q.reshape(3, 1)
-
-        if 'trans' in keyargs:
-            trans = keyargs['trans']
-        else:
-            trans = True
-
-        if 'deg' in keyargs:
-            deg = keyargs['deg']
-        else:
-            deg = True
-
-        angle = numpy.zeros((4, q.shape[1]))
+        angle = numpy.zeros((4, q.shape[0]))
         # set parameters for the calculation
         z = self.Transform(self.ndir)  # z
         y = self.Transform(self.idir)  # y
         x = self.Transform(self.scatplane)  # x
 
-        for i in range(q.shape[1]):
-            qvec = q[:, i]
+        if trans:
+            q = self.Transform(q)
 
-            if trans:
-                qvec = self.Transform(qvec)
+        if config.VERBOSITY >= config.DEBUG:
+            print("XU.NonCop.Q2Ang: q= %s" % repr(q))
 
-            if config.VERBOSITY >= config.INFO_ALL:
-                print("XU.HXRD.Q2Ang: qvec= %s" % repr(qvec))
+        qa = math.VecNorm(q)
+        tth = 2. * numpy.arcsin(qa / 2. / self.k0)
+        om = tth / 2.
 
-            qa = math.VecNorm(qvec)
-            tth = 2. * numpy.arcsin(qa / 2. / self.k0)
-            om = tth / 2.
+        # calculation of the sample azimuth
+        # the sign depends on the phi movement direction
+        phi = -1 * numpy.arctan2(
+            math.VecDot(q, x),
+            math.VecDot(q, y)) - numpy.pi / 2.
 
-            # calculation of the sample azimuth
-            # the sign depends on the phi movement direction
-            phi = -1 * numpy.arctan2(
-                math.VecDot(x, qvec),
-                math.VecDot(y, qvec)) - numpy.pi / 2.
+        chi = (math.VecAngle(q, z))
 
-            chi = (math.VecAngle(z, qvec))
+        angle[0, :] = om
+        angle[1, :] = chi
+        angle[2, :] = phi
+        angle[3, :] = tth
 
-            angle[0, i] = om
-            angle[1, i] = chi
-            angle[2, i] = phi
-            angle[3, i] = tth
-
-        if q.shape[1] == 1:
+        if q.shape[0] == 1:
             angle = angle.flatten()
             if config.VERBOSITY >= config.INFO_ALL:
-                print("XU.HXRD.Q2Ang: [om,chi,phi,tth] = %s" % repr(angle))
+                print("XU.HXRD.Q2Ang: [om, chi, phi, tth] = %s" % repr(angle))
 
         if deg:
             return numpy.degrees(angle)
@@ -2100,7 +2245,7 @@ class GID(Experiment):
     the class helps with calculating the angles of Bragg reflections
     as well as it helps with analyzing measured data
 
-    the class describes a four circle (alpha_i,azimuth,twotheta,beta)
+    the class describes a four circle (alpha_i, azimuth, twotheta, beta)
     goniometer to help with GID experiments at the ROTATING ANODE.
     3D data can be treated with the use of linear and area detectors.
     see help self.Ang2Q
@@ -2113,14 +2258,15 @@ class GID(Experiment):
         """
         initialization routine for the GID Experiment class
 
-        idir defines the inplane reference direction (idir points into the PB
-           direction at zero angles)
-        ndir defines the surface normal of your sample (ndir points along the
-           innermost sample rotation axis)
+         - ``idir`` defines the inplane reference direction (idir points into
+           the PB direction at zero angles)
+         - ``ndir`` defines the surface normal of your sample (ndir points
+           along the innermost sample rotation axis)
 
         Parameters
         ----------
-        same as for the Experiment base class
+        idir, ndir, keyargs :
+            same as for the Experiment base class
         """
         if 'sampleor' not in keyargs:
             keyargs['sampleor'] = 'sam'
@@ -2139,26 +2285,34 @@ class GID(Experiment):
         the reference direction is parallel to the primary beam
         (i.e. lattice planes perpendicular to the beam)
 
+        Note:
+            The behavior of this function is unchanged if the goniometer
+            definition is changed!
+
         Parameters
         ----------
-         Q:          a list or numpy array of shape (3) with
-                     q-space vector components
+        Q :         list, tuple or array-like
+            array of shape (3) with q-space vector components or 3
+            separate lists with qx, qy, qz
 
-        optional keyword arguments:
-         trans:      True/False apply coordinate transformation on Q
-         deg:        True/Flase (default True) determines if the
-                     angles are returned in radians or degrees
+        trans :     bool, optional
+            apply coordinate transformation on Q (default True)
+        deg :       book, optional
+            (default True) determines if the angles are returned in radians or
+            degrees
 
         Returns
         -------
-        a numpy array of shape (4) with the four GID scattering angles which
-        are [alpha_i, azimuth, twotheta, beta]
+        ndarray
+            a numpy array of shape (4) with four GID scattering
+            angles which are [alpha_i, azimuth, twotheta, beta];
 
-         alpha_i:    incidence angle to surface (at the moment always 0)
-         azimuth:    sample rotation with respect to the inplane reference
-                     direction
-         twotheta:   scattering angle
-         beta:       exit angle from surface (at the moment always 0)
+             - alpha_i :    incidence angle to surface (at the moment always 0)
+             - azimuth :    sample rotation with respect to the inplane
+                            reference direction
+             - twotheta :   scattering angle
+             - beta :       exit angle from surface (at the moment always 0)
+
         """
 
         for k in kwargs.keys():
@@ -2191,7 +2345,7 @@ class GID(Experiment):
                              % str(q))
 
         # calculate angle to inplane reference direction
-        aref = numpy.arctan2(math.VecDot(x, q), math.VecDot(y, q))
+        aref = numpy.arctan2(math.VecDot(q, x), math.VecDot(q, y))
 
         # calculate scattering angle
         qa = math.VecNorm(q)
@@ -2204,8 +2358,8 @@ class GID(Experiment):
             ang = [0, azimuth, tth, 0]
 
         if config.VERBOSITY >= config.INFO_ALL:
-            print("XU.GID.Q2Ang: [ai,azimuth,tth,beta] = %s \n difference to "
-                  "inplane reference which is %5.2f" % (str(ang), aref))
+            print("XU.GID.Q2Ang: [ai, azimuth, tth, beta] = %s \n difference "
+                  "to inplane reference which is %5.2f" % (str(ang), aref))
 
         return ang
 
@@ -2216,25 +2370,31 @@ class GID(Experiment):
 
         Parameters
         ----------
-         ai,phi,tt,beta: sample and detector angles as numpy array, lists or
-                         Scalars must be given. All arguments must have the
-                         same shape or length. However, if one angle is always
-                         the same its enough to give one scalar value.
+        ai, phi, tt, beta : float or array-like
+            sample and detector angles as numpy array, lists or Scalars must be
+            given. All arguments must have the same shape or length. However,
+            if one angle is always the same its enough to give one scalar
+            value.
 
-        **kwargs:   optional keyword arguments
-            delta:  giving delta angles to correct the given ones for
-                    misalignment delta must be an numpy array or list of
-                    length 4. Used angles are than ai,phi,tt,beta - delta
-            UB:     matrix for conversion from (hkl) coordinates to Q of sample
-                    used to determine not Q but (hkl)
-                    (default: identity matrix)
-            wl:     x-ray wavelength in angstroem (default: self._wl)
-            deg:    flag to tell if angles are passed as degree (default: True)
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list, tuple or array-like, optional
+            giving delta angles to correct the given ones for misalignment
+            delta must be an numpy array or list of length 4. Used angles are
+            then ``ai, phi, tt, beta - delta``
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: identity matrix)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
 
         Returns
         -------
-        reciprocal space positions as numpy.ndarray with shape ( * , 3 )
-        where * corresponds to the number of points given in the input
+        ndarray
+            reciprocal space positions as numpy.ndarray with shape `(N , 3)`
+            where `N` corresponds to the number of points given in the input
         """
         # dummy function to have some documentation string available
         # the real function is generated dynamically in the __init__ routine
@@ -2248,7 +2408,7 @@ class GISAXS(Experiment):
     the class helps with calculating the angles of Bragg reflections
     as well as it helps with analyzing measured data
 
-    the class describes a three circle (alpha_i,twotheta,beta)
+    the class describes a three circle (alpha_i, twotheta, beta)
     goniometer to help with GISAXS experiments at the ROTATING ANODE.
     3D data can be treated with the use of linear and area detectors.
     see help self.Ang2Q
@@ -2258,13 +2418,13 @@ class GISAXS(Experiment):
         """
         initialization routine for the GISAXS Experiment class
 
-        idir defines the inplane reference direction (idir points into the PB
-        direction at zero angles)
+        ``idir`` defines the inplane reference direction (idir points into the
+        PB direction at zero angles)
 
         Parameters
         ----------
-        same as for the Experiment base class
-
+        idir, ndir, keyargs :
+            same as for the Experiment base class
         """
         if "qconv" not in keyargs:
             # 1S+2D goniometer
@@ -2283,168 +2443,55 @@ class GISAXS(Experiment):
 
         Parameters
         ----------
-         ai,tt,beta: sample and detector angles as numpy array, lists or
-                     Scalars must be given. all arguments must have the same
-                     shape or length. Howevver, if one angle is always the same
-                     its enough to give one scalar value.
+        ai, tt, beta :  float or array-like
+            sample and detector angles as numpy array, lists or Scalars must be
+            given. all arguments must have the same shape or length. Howevver,
+            if one angle is always the same its enough to give one scalar
+            value.
 
-        **kwargs:   optional keyword arguments
-            delta:  giving delta angles to correct the given ones for
-                    misalignment delta must be an numpy array or list of
-                    length 3. Used angles are than ai,tt,beta - delta
-            UB:     matrix for conversion from (hkl) coordinates to Q of sample
-                    used to determine not Q but (hkl)
-                    (default: identity matrix)
-            wl:     x-ray wavelength in angstroem (default: self._wl)
-            deg:    flag to tell if angles are passed as degree (default: True)
+        kwargs :    dict, optional
+            optional keyword arguments
+        delta :     list, tuple or array-like, optional
+            giving delta angles to correct the given ones for misalignment
+            delta must be an numpy array or list of length 3. Used angles are
+            then ``ai, tt, beta - delta``
+        UB :        array-like, optional
+            matrix for conversion from (hkl) coordinates to Q of sample used to
+            determine not Q but (hkl) (default: identity matrix)
+        wl :        float or str, optional
+            x-ray wavelength in angstroem (default: self._wl)
+        deg :       bool, optional
+            flag to tell if angles are passed as degree (default: True)
 
         Returns
         -------
-        reciprocal space positions as numpy.ndarray with shape ( * , 3 )
-        where * corresponds to the number of points given in the input
+        ndarray
+            reciprocal space positions as numpy.ndarray with shape `(N , 3)`
+            where `N` corresponds to the number of points given in the input
         """
         # dummy function to have some documentation string available
         # the real function is generated dynamically in the __init__ routine
         pass
 
 
-class Powder(Experiment):
-
+class PowderExperiment(Experiment):
     """
-    Experimental class for powder diffraction
-    This class is able to simulate a powder spectrum for the given material
+    Experimental class for powder diffraction which helps to convert theta
+    angles to momentum transfer space
     """
 
-    def __init__(self, mat, **keyargs):
+    def __init__(self, **kwargs):
         """
-        the class is initialized with xrayutilities.materials.Material instance
+        class constructor which takes the same keyword arguments as the
+        Experiment class
 
         Parameters
         ----------
-         mat:        xrayutilities.material.Material instance
-                     giving the material for the experimental class
-         keyargs:    optional keyword arguments
-                     same as for the Experiment base class
+        kwargs :     dict, optional
+            keyword arguments same as for the Experiment base class
         """
-        if isinstance(mat, materials.Material):
-            self.mat = mat
-        else:
-            raise TypeError("mat must be an instance of class "
-                            "xrayutilities.materials.Material")
-
-        # number of significant digits, needed to identify equal floats
-        self.digits = 5
-        self.qpos = None
-
-        Experiment.__init__(self, [0, 1, 0], [0, 0, 1], **keyargs)
-
-    def PowderIntensity(self, tt_cutoff=180):
-        """
-        Calculates the powder intensity and positions up to an angle of
-        tt_cutoff (deg) and stores the result in:
-
-            data .... array with intensities
-            ang ..... angular position of intensities
-            qpos .... reciprocal space position of intensities
-        """
-
-        # calculate maximal Bragg indices
-        hmax = int(numpy.ceil(norm(self.mat.lattice.a1) *
-                   self.k0 / numpy.pi *
-                   numpy.sin(numpy.radians(tt_cutoff / 2.))))
-        hmin = -hmax
-        kmax = int(numpy.ceil(norm(self.mat.lattice.a2) *
-                   self.k0 / numpy.pi *
-                   numpy.sin(numpy.radians(tt_cutoff / 2.))))
-        kmin = -kmax
-        lmax = int(numpy.ceil(norm(self.mat.lattice.a3) *
-                   self.k0 / numpy.pi *
-                   numpy.sin(numpy.radians(tt_cutoff / 2.))))
-        lmin = -lmax
-
-        if config.VERBOSITY >= config.INFO_ALL:
-            print("XU.Powder.PowderIntensity: tt_cutoff; (hmax,kmax,lmax): "
-                  "%6.2f (%d,%d,%d)" % (tt_cutoff, hmax, kmax, lmax))
-
-        qlist = []
-        qabslist = []
-        hkllist = []
-        qmax = numpy.sqrt(2) * self.k0 * numpy.sqrt(
-            1 - numpy.cos(numpy.radians(tt_cutoff)))
-        # calculate structure factor for each reflex
-        for h in range(hmin, hmax + 1):
-            for k in range(kmin, kmax + 1):
-                for l in range(lmin, lmax + 1):
-                    q = self.mat.Q(h, k, l)
-                    if norm(q) < qmax:
-                        qlist.append(q)
-                        hkllist.append([h, k, l])
-                        qabslist.append(numpy.round(norm(q), self.digits))
-
-        qabs = numpy.array(qabslist, dtype=numpy.double)
-        s = self.mat.StructureFactorForQ(qlist, self.energy)
-        r = numpy.absolute(s) ** 2
-
-        _tmp_data = numpy.zeros(r.size, dtype=[('q', numpy.double),
-                                               ('r', numpy.double),
-                                               ('hkl', list)])
-        _tmp_data['q'] = qabs
-        _tmp_data['r'] = r
-        _tmp_data['hkl'] = hkllist
-        # sort the list and compress equal entries
-        _tmp_data.sort(order='q')
-
-        self.qpos = [0]
-        self.data = [0]
-        self.hkl = [[0, 0, 0]]
-        for r in _tmp_data:
-            if r[0] == self.qpos[-1]:
-                self.data[-1] += r[1]
-            elif numpy.round(r[1], self.digits) != 0.:
-                self.qpos.append(r[0])
-                self.data.append(r[1])
-                self.hkl.append(r[2])
-
-        # cat first element to get rid of q = [0,0,0] divergence
-        self.qpos = numpy.array(self.qpos[1:], dtype=numpy.double)
-        self.ang = self.Q2Ang(self.qpos)
-        self.data = numpy.array(self.data[1:], dtype=numpy.double)
-        self.hkl = self.hkl[1:]
-
-        # correct data for polarization and lorentzfactor and unit cell volume
-        # see L.S. Zevin : Quantitative X-Ray Diffractometry
-        # page 18ff
-        polarization_factor = (1 +
-                               numpy.cos(numpy.radians(2 * self.ang)) ** 2) / 2
-        lorentz_factor = 1. / (numpy.sin(numpy.radians(self.ang)) ** 2 *
-                               numpy.cos(numpy.radians(self.ang)))
-        unitcellvol = self.mat.lattice.UnitCellVolume()
-        self.data = (self.data * polarization_factor *
-                     lorentz_factor / unitcellvol ** 2)
-
-    def Convolute(self, stepwidth, width, min=0, max=None):
-        """
-        Convolutes the intensity positions with Gaussians with width in
-        momentum space of "width". returns array of angular positions with
-        corresponding intensity
-
-            theta ... array with angular positions
-            int ..... intensity at the positions ttheta
-        """
-
-        if not max:
-            max = 2 * self.k0
-
-        # convolute each peak with a gaussian and add them up
-        qcoord = numpy.arange(min, max, stepwidth)
-        theta = self.Q2Ang(qcoord)
-        intensity = numpy.zeros(theta.size, dtype=numpy.double)
-
-        for i in range(self.ang.size):
-            intensity += math.Gauss1d(qcoord, self.qpos[i], width,
-                                      self.data[i], 0)
-
-        return theta, intensity
+        Experiment.__init__(self, [0, 1, 0], [0, 0, 1], **kwargs)
+        self.Ang2Q = self._Ang2Q
 
     def _Ang2Q(self, th, deg=True):
         """
@@ -2469,29 +2516,3 @@ class Powder(Experiment):
             th = numpy.degrees(th)
 
         return th
-
-    def __str__(self):
-        """
-        Prints out available information about the material and reflections
-        """
-        ostr = "\nPowder diffraction object \n"
-        ostr += "-------------------------\n"
-        ostr += "Material: " + self.mat.name + "\n"
-        ostr += "Lattice:\n" + self.mat.lattice.__str__()
-        if self.qpos is not None:
-            max = self.data.max()
-            ostr += "\nReflections: \n"
-            ostr += "--------------\n"
-            ostr += ("      h k l     |    tth    |    |Q|    |"
-                     "Int     |   Int (%)\n")
-            ostr += ("   ------------------------------------"
-                     "---------------------------\n")
-            for i in range(self.qpos.size):
-                ostr += ("%15s   %8.4f   %8.3f   %10.2f  %10.2f\n"
-                         % (self.hkl[i].__str__(),
-                            2 * self.ang[i],
-                            self.qpos[i],
-                            self.data[i],
-                            self.data[i] / max * 100.))
-
-        return ostr

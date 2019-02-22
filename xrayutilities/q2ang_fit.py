@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2014 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2015-2016 Dominik Kriegner <dominik.kriegner@gmail.com>
 
 """
 Module provides functions to convert a q-vector from reciprocal space to
@@ -31,11 +31,12 @@ analytic expressions from literature can be used as they are implemented in the
 predefined experimental classes HXRD, NonCOP, and GID.
 """
 
-import scipy.optimize
-import numpy
 import numbers
 
-from . import config
+import numpy
+import scipy.optimize
+
+from . import config, math
 from .exception import InputError
 
 
@@ -46,16 +47,17 @@ def _makebounds(boundsin):
 
     Parameters
     ----------
-     boundsin:   list/tuple/array of bounds, or fixed values. the number of
-                 entries needs to be equal to the number of angle in the
-                 goniometer given to the q2ang_general function
-                 example input for four gonimeter angles:
-                 ((0, 90), 0, (0, 180), (0, 90))
+    boundsin :  list or tuple or array-like
+        bounds, or fixed values. the number of entries needs to be equal to the
+        number of angle in the goniometer given to the q2ang_general function
+        example input for four gonimeter angles: ((0, 90), 0, (0, 180), (0,
+        90))
 
     Returns
     -------
-     bounds to be handed over to the scipy.minimize routine. The function will
-     expand
+    tuple
+        bounds to be handed over to the scipy.minimize routine. The function
+        will expand fixed values to two equal bounds
     """
     boundsout = []
     for b in boundsin:
@@ -83,15 +85,20 @@ def _errornorm_q2ang(angles, qvec, hxrd, U=numpy.identity(3)):
 
     Parameters
     ----------
-     angles   iterable object with angles of the goniometer
-     qvec     vector with three q-coordinates
-     hxrd     experiment class to be used for the q calculation
-     U        orientation matrix
+    angles :    iterable
+        iterable object with angles of the goniometer
+    qvec :      list or tuple or array-like
+        vector with three q-coordinates
+    hxrd :      Experiment
+        experiment class to be used for the q calculation
+    U :         array-like, optional
+        orientation matrix
 
     Returns
     -------
-     q-space error between the current fit-guess and the user-specified
-     position
+    error : float
+        q-space error between the current fit-guess and the user-specified
+        position
     """
 
     qcalc = hxrd.Ang2Q.point(*angles, UB=U)
@@ -99,8 +106,33 @@ def _errornorm_q2ang(angles, qvec, hxrd, U=numpy.identity(3)):
     return dq
 
 
+def exitAngleConst(angles, alphaf, hxrd):
+    """
+    helper function for an pseudo-angle constraint for the Q2AngFit-routine.
+
+    Parameters
+    ----------
+    angles :    iterable
+        fit parameters of Q2AngFit
+    alphaf :    float
+        the exit angle which should be fixed
+    hxrd :      Experiment
+        the Experiment object to use for qconversion
+    """
+    qconv = hxrd._A2QConversion
+    # calc kf
+    detangles = [a for a in angles[-len(qconv.detectorAxis):]]
+    kf = qconv.getDetectorPos(*detangles)
+    if numpy.linalg.norm(kf) == 0:
+        af = 0
+    else:
+        ndirlab = qconv.transformSample2Lab(hxrd.Transform(hxrd.ndir), *angles)
+        af = 90 - math.VecAngle(kf, ndirlab, deg=True) - alphaf
+    return af
+
+
 def Q2AngFit(qvec, expclass, bounds=None, ormat=numpy.identity(3),
-             startvalues=None):
+             startvalues=None, constraints=()):
     """
     Functions to convert a q-vector from reciprocal space to angular space.
     This implementation uses scipy optimize routines to perform a fit for a
@@ -113,33 +145,45 @@ def Q2AngFit(qvec, expclass, bounds=None, ormat=numpy.identity(3),
 
     Parameters
     ----------
-     qvec:      q-vector for which the angular positions should be calculated
-     expclass:  experimental class used to define the goniometer for which the
-                angles should be calculated.
+    qvec :      tuple or list or array-like
+        q-vector for which the angular positions should be calculated
+    expclass :  Experiment
+        experimental class used to define the goniometer for which the angles
+        should be calculated.
 
-     keyword arguments(optional):
-      bounds:   list of bounds of the goniometer angles. The number of bounds
-                must correspond to the number of goniometer angles in the
-                expclass.  Angles can also be fixed by supplying only one value
-                for a particular angle. e.g.:
-                ((low, up), fix, (low2, up2), (low3, up3))
-      ormat:    orientation matrix of the sample to be used in the conversion
-      startvalues:  start values for the fit, which can significantly speed up
-                    the conversion. The number of values must correspond to the
-                    number of angles in the goniometer of the expclass
+    bounds :    tuple or list
+        bounds of the goniometer angles. The number of bounds must correspond
+        to the number of goniometer angles in the expclass.  Angles can also be
+        fixed by supplying only one value for a particular angle. e.g.: ((low,
+        up), fix, (low2, up2), (low3, up3))
+    ormat :     array-like
+        orientation matrix of the sample to be used in the conversion
+    startvalues :   array-like
+        start values for the fit, which can significantly speed up the
+        conversion. The number of values must correspond to the number of
+        angles in the goniometer of the expclass
+    constraints :   tuple
+        sequence of constraint dictionaries. This allows applying arbitrary
+        (e.g. pseudo-angle) contraints by supplying according constraint
+        functions. (see scipy.optimize.minimize). The supplied function will be
+        called with the arguments (angles, qvec, Experiment, U).
 
     Returns
     -------
-     fittedangles, qerror, errcode:
-        list of fitted goniometer angles, the error in reciprocal space and the
-        errcode of the scipy minimize function. for a successful fit the error
-        code should be <=2
+    fittedangles :  list
+        list of fitted goniometer angles
+    qerror :        float
+        error in reciprocal space
+    errcode :       int
+        error-code of the scipy minimize function. for a successful fit the
+        error code should be <=2
     """
 
     # check input parameters
     if len(qvec) != 3:
         raise ValueError("XU.Q2AngFit: length of given q-vector is not 3 "
                          "-> invalid")
+    lqvec = numpy.asarray(qvec)
 
     qconv = expclass._A2QConversion
     nangles = len(qconv.sampleAxis) + len(qconv.detectorAxis)
@@ -159,29 +203,33 @@ def Q2AngFit(qvec, expclass, bounds=None, ormat=numpy.identity(3),
         raise ValueError("XU.Q2AngFit: number of specified bounds invalid")
 
     # perform optimization
-    x, nfun, errcode = scipy.optimize.fmin_tnc(
-        _errornorm_q2ang, start, args=(qvec, expclass, ormat),
-        bounds=_makebounds(bounds), approx_grad=True, maxfun=1000, disp=False)
+    res = scipy.optimize.minimize(_errornorm_q2ang, start,
+                                  args=(lqvec, expclass, ormat),
+                                  method='SLSQP', bounds=_makebounds(bounds),
+                                  constraints=constraints,
+                                  options={'maxiter': 1000,
+                                           'eps': config.EPSILON,
+                                           'ftol': config.EPSILON})
 
-    qerror = _errornorm_q2ang(x, qvec, expclass, ormat)
-    if qerror >= 1e-6:
+    x, errcode, qerror = (res.x, res.status, res.fun)
+    if qerror >= 1e-7:
         if config.VERBOSITY >= config.DEBUG:
             print("XU.Q2AngFit: info: need second run")
         # make a second run
-        x, nfun, errcode = scipy.optimize.fmin_tnc(
-            _errornorm_q2ang, x, args=(qvec, expclass, ormat),
-            bounds=_makebounds(bounds), approx_grad=True,
-            maxfun=1000, disp=False)
+        res = scipy.optimize.minimize(_errornorm_q2ang, res.x,
+                                      args=(lqvec, expclass, ormat),
+                                      method='SLSQP',
+                                      bounds=_makebounds(bounds),
+                                      constraints=constraints,
+                                      options={'maxiter': 1000,
+                                               'eps': config.EPSILON,
+                                               'ftol': config.EPSILON})
+        x, errcode, qerror = (res.x, res.status, res.fun)
 
-    qerror = _errornorm_q2ang(x, qvec, expclass, ormat)
-    if config.VERBOSITY >= config.DEBUG:
+    if ((config.VERBOSITY >= config.DEBUG) or (qerror > 10*config.EPSILON and
+                                               config.VERBOSITY >=
+                                               config.INFO_LOW)):
         print("XU.Q2AngFit: q-error=%.4g with error-code %d (%s)"
-              % (qerror, errcode, scipy.optimize.tnc.RCSTRINGS[errcode]))
-
-    if (errcode >= 3 and
-            qerror > config.EPSILON and
-            config.VERBOSITY >= config.INFO_LOW):
-        print("xu.Q2AngFit: qerror=%.4g with error-code %d (%s)"
-              % (qerror, errcode, scipy.optimize.tnc.RCSTRINGS[errcode]))
+              % (qerror, errcode, res.message))
 
     return x, qerror, errcode

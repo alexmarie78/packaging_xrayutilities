@@ -13,22 +13,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, see <http://www.gnu.org/licenses/>.
 #
-# Copyright (C) 2012 Dominik Kriegner <dominik.kriegner@gmail.com>
+# Copyright (C) 2012, 2018 Dominik Kriegner <dominik.kriegner@gmail.com>
 # Copyright (C) 2012 Tanja Etzelstorfer <tanja.etzelstorfer@jku.at>
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy
 import xrayutilities as xu
 
 # plot settings for matplotlib
 mpl.rcParams['font.family'] = 'serif'
 mpl.rcParams['font.size'] = 20.0
 mpl.rcParams['axes.labelsize'] = 'large'
-mpl.rcParams['figure.subplot.bottom'] = 0.16
-mpl.rcParams['figure.subplot.left'] = 0.17
-mpl.rcParams['savefig.dpi'] = 200
-mpl.rcParams['axes.grid'] = False
-
 
 # global setting for the experiment
 sample = "rsm"  # sample name used also as file name for the data file
@@ -57,8 +53,8 @@ omalign, ttalign, p, cov = xu.analysis.fit_bragg_peak(
     om, tt, psd, omalign, ttalign, hxrd, plot=False)
 
 # convert angular coordinates to reciprocal space + correct for offsets
-[qx, qy, qz] = hxrd.Ang2Q(om, tt, delta=[omalign - omnominal,
-                                         ttalign - ttnominal])
+qx, qy, qz = hxrd.Ang2Q(om, tt, delta=[omalign - omnominal,
+                                       ttalign - ttnominal])
 
 # calculate data on a regular grid of 200x201 points
 gridder = xu.Gridder2D(200, 600)
@@ -67,7 +63,6 @@ INT = xu.maplog(gridder.data.transpose(), 6, 0)
 
 # plot the intensity as contour plot
 plt.figure()
-plt.clf()
 cf = plt.contourf(gridder.xaxis, gridder.yaxis, INT, 100, extend='min')
 plt.xlabel(r'$Q_{[110]}$ ($\AA^{-1}$)')
 plt.ylabel(r'$Q_{[001]}$ ($\AA^{-1}$)')
@@ -75,4 +70,31 @@ cb = plt.colorbar(cf)
 cb.set_label(r"$\log($Int$)$ (cps)")
 
 tr = SiGe.RelaxationTriangle([0, 0, 4], Si, hxrd)
-plt.plot(tr[0], tr[1], 'ko')
+# plt.plot(tr[0], tr[1], 'ko')
+plt.tight_layout()
+
+# line cut with integration along 2theta to remove beam footprint broadening
+qycpos, qzcpos = [0, 4.5]
+omp, dummy, dummy, ttp = hxrd.Q2Ang(0, qycpos, qzcpos, trans=False)
+qzc, qzint, cmask = xu.analysis.get_radial_scan(
+    [qy, qz], psd, (qycpos, qzcpos), 1001, 0.155, intdir='2theta')
+
+# show used data on the reciprocal space map
+plt.tricontour(qy, qz, cmask, (0.999,), colors='r')
+
+# show possible integration directions
+f = 1.02
+plt.plot([qycpos/f, qycpos*f], [qzcpos/f, qzcpos*f], label='radial')
+a = numpy.radians(numpy.linspace(- 2, 2, 100))
+plt.plot(qycpos*numpy.cos(a)+qzcpos*numpy.sin(a),
+         -qycpos*numpy.sin(a)+qzcpos*numpy.cos(a), label='Omega')
+qx, qy, qz = hxrd.Ang2Q(omp, ttp+numpy.linspace(-2, 2, 100))
+plt.plot(qy, qz, label='2Theta')
+plt.legend()
+
+# plot line cut
+plt.figure()
+plt.semilogy(qzc, qzint)
+plt.xlabel(r'scattering angle (deg)')
+plt.ylabel(r'intensity (arb. u.)')
+plt.tight_layout()

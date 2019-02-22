@@ -20,13 +20,12 @@
 import os.path
 import re
 import glob
-
 import numpy
 import h5py
 
-from .helper import xu_open, xu_h5open
-from .. import cxrayutilities
-from .. import config
+from .. import config, cxrayutilities
+from .filedir import FileDirectory
+from .helper import xu_h5open, xu_open
 
 cbf_name_start_num = re.compile(r"^\d")
 
@@ -46,17 +45,20 @@ class CBFFile(object):
         """
         CBF detector image parser
 
-        required arguments:
-        fname ........ name of the CBF file of type .cbf or .cbf.gz
-
-        keyword arguments:
-        nxkey ........ name of the header key that holds the number of points
-                       in x-direction
-        nykey ........ name of the header key that holds the number of points
-                       in y-direction
-        dtkey ........ name of the header key that holds the datatype for the
-                       binary data
-        path ......... path to the CBF file
+        Parameters
+        ----------
+        fname :     str
+            name of the CBF file of type .cbf or .cbf.gz
+        nxkey :     str, optional
+            name of the header key that holds the number of points in
+            x-direction
+        nykey :     str, optional
+            name of the header key that holds the number of points in
+            y-direction
+        dtkey :     str, optional
+            name of the header key that holds the datatype for the binary data
+        path :      str, optional
+            path to the CBF file
         """
 
         self.filename = fname
@@ -100,12 +102,12 @@ class CBFFile(object):
 
         Parameters
         ----------
-         h5f ....... a HDF5 file object or name
-
-        optional keyword arguments:
-         group ..... group where to store the data (default to the root of the
-                     file)
-         comp ...... activate compression - true by default
+        h5f :   file-handle or str
+            a HDF5 file object or name
+        group : str, optional
+            group where to store the data (default to the root of the file)
+        comp :  bool, optional
+            activate compression - true by default
         """
         with xu_h5open(h5f, 'a') as h5:
             if isinstance(group, str):
@@ -141,7 +143,7 @@ class CBFFile(object):
             ca.attrs['TITLE'] = desc
 
 
-class CBFDirectory(object):
+class CBFDirectory(FileDirectory):
 
     """
     Parses a directory for CBF files, which can be stored to a HDF5 file for
@@ -209,3 +211,14 @@ class CBFDirectory(object):
                 filename = os.path.split(infile)[1]
                 e = CBFFile(filename, path=self.datapath, **self.init_keyargs)
                 e.Save2HDF5(h5, group=g, comp=comp)
+        """
+        Parameters
+        ----------
+        datapath :  str
+            directory of the CBF files
+        ext :       str, optional
+            extension of the ccd files in the datapath (default: "cbf")
+        keyargs :   dict, optional
+            further keyword arguments are passed to CBFFile
+        """
+        super(CBFDirectory, self).__init__(datapath, ext, CBFFile, **keyargs)

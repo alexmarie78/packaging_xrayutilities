@@ -27,10 +27,9 @@ acquisition) a signal above a certain threshold remains it is expected to arise
 from a hot pixel and such pixels should be removed to avoid spikes in the data.
 """
 
+import glob
 import numpy
 import xrayutilities as xu
-import glob
-
 
 def hotpixelkill(ccd):
     """
@@ -53,6 +52,18 @@ for f in glob.glob("G:\data\dark*.edf"):
         ccdavg += ccdraw
     except:
         ccdavg = ccdraw.astype(numpy.float)
+
+# identify hot pixels numbers from a series of dark images
+# open a series of 2D detector frames
+ccdavg = numpy.empty(0)
+n = 0
+for f in glob.glob(r"G:\data\dark*.edf"):
+    e = xu.io.EDFFile(f)
+    ccdraw = e.data
+    if len(ccdavg) == 0:
+        ccdavg = ccdraw.astype(numpy.float)
+    else:
+        ccdavg += ccdraw
     n += 1
 
 ccdavg /= float(n)

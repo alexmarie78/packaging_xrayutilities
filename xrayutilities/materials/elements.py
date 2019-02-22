@@ -16,7 +16,7 @@
 # Copyright (C) 2009 Eugen Wintersberger <eugen.wintersberger@desy.de>
 # Copyright (C) 2010-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
 
-from .lattice import Atom
+from .atom import Atom
 
 dummy = Atom('dummy', 0)
 H = Atom('H', 1)
@@ -36,6 +36,7 @@ N = Atom('N', 7)
 O = Atom('O', 8)
 O1m = Atom('O1-', 8)
 O2mdot = Atom('O2-.', 8)
+O2m = Atom('O2-.', 8)
 F = Atom('F', 9)
 F1m = Atom('F1-', 9)
 Ne = Atom('Ne', 10)
@@ -115,7 +116,7 @@ Mo6p = Atom('Mo6+', 42)
 Tc = Atom('Tc', 43)
 Ru = Atom('Ru', 44)
 Ru3p = Atom('Ru3+', 44)
-Rup4 = Atom('Ru+4', 44)
+Ru4p = Atom('Ru4+', 44)
 Rh = Atom('Rh', 45)
 Rh3p = Atom('Rh3+', 45)
 Rh4p = Atom('Rh4+', 45)

@@ -10,6 +10,7 @@ Subpackages
     xrayutilities.io
     xrayutilities.materials
     xrayutilities.math
+    xrayutilities.simpack
 
 Submodules
 ----------
@@ -62,6 +63,14 @@ xrayutilities.gridder3d module
     :undoc-members:
     :show-inheritance:
 
+xrayutilities.mpl\_helper module
+--------------------------------
+
+.. automodule:: xrayutilities.mpl_helper
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 xrayutilities.normalize module
 ------------------------------
 
@@ -70,8 +79,8 @@ xrayutilities.normalize module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.q2ang_fit module
-------------------------------
+xrayutilities.q2ang\_fit module
+-------------------------------
 
 .. automodule:: xrayutilities.q2ang_fit
     :members:
@@ -86,8 +95,8 @@ xrayutilities.utilities module
     :undoc-members:
     :show-inheritance:
 
-xrayutilities.utilities_noconf module
--------------------------------------
+xrayutilities.utilities\_noconf module
+--------------------------------------
 
 .. automodule:: xrayutilities.utilities_noconf
     :members:
