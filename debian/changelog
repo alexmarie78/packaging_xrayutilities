@@ -1,5 +1,9 @@
-python-xrayutilities (1.2.0-1) UNRELEASED; urgency=low
+python-xrayutilities (1.2.0-1) UNRELEASED; urgency=medium
 
+  [ Eugen Wintersberger ]
   * Initial release. (Closes: #723017)
 
- -- Eugen Wintersberger <eugen.wintersberger@gmail.com>  Sun, 15 Sep 2013 13:42:41 +0200
+  [ Alexandre Marie ]
+  * d/watch updated to download at the right url
+
+ -- Alexandre Marie <alexandre.marie@synchrotron-soleil.fr>  Fri, 22 Feb 2019 09:57:30 +0100
