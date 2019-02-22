@@ -6,26 +6,26 @@ Home-page: http://xrayutilities.sourceforge.net
 Author: Dominik Kriegner
 Author-email: dominik.kriegner@gmail.com
 License: GPLv2
-Description: 
+Description:
         =============
         xrayutilities
         =============
-        
+
         xrayutilities is a collection of scripts used to analyze x-ray diffraction
         data.  It consists of a Python package and several routines coded in C. It is
         especially useful for the reciprocal space conversion of diffraction data
         taken with linear and area detectors.
-        
-        
+
+
         Copyright (C) 2009-2015 Dominik Kriegner <dominik.kriegner@gmail.com>
-        
+
         Copyright (C) 2009-2013 Eugen Wintersberger <eugen.wintersberger@desy.de>
-        
-        
-        
+
+
+
         Contents
         --------
-        
+
         * examples:           directory with example scripts and configurations
         * xrayutilities:      directory with the sources for the Python package
         * setup.py:           distutils install script used for the package installation
