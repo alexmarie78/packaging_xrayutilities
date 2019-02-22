@@ -3,6 +3,7 @@ python-xrayutilities (1.5.1-1) unstable; urgency=medium
   [ Alexandre Marie ]
   * Updated to upstream version.
   * Fixed several conflicts.
+  * Fixed git tree diffs.
 
  -- Alexandre Marie <alexandre.marie@synchrotron-soleil.fr>  Fri, 22 Feb 2019 13:57:22 +0100
 
